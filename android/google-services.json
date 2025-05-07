@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_number": "605305531825",
+    "project_id": "proyectocorelife",
+    "storage_bucket": "proyectocorelife.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:605305531825:android:09c93915b2f5c30c606190",
+        "android_client_info": {
+          "package_name": "com.corelife.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "605305531825-d4a8v8aj0821bt1ojo8ahdgclpf8ho1b.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyArdyf3lzCyd-XxL5OuHXBQgkqRSRbcwMA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "605305531825-d4a8v8aj0821bt1ojo8ahdgclpf8ho1b.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "605305531825-1007liaaf2cotggg01pr99tgek7m2cb1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.corelife"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:605305531825:android:dbf5e8f8bc8cf74d606190",
+        "android_client_info": {
+          "package_name": "com.example.corelife"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "605305531825-d4a8v8aj0821bt1ojo8ahdgclpf8ho1b.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyArdyf3lzCyd-XxL5OuHXBQgkqRSRbcwMA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "605305531825-d4a8v8aj0821bt1ojo8ahdgclpf8ho1b.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "605305531825-1007liaaf2cotggg01pr99tgek7m2cb1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.corelife"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
