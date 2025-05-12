@@ -60,4 +60,6 @@ class AuthService {
   Future<bool> isUserLoggedIn() async {
     return _auth.currentUser != null;
   }
+
+  signInWithGoogle() {}
 }

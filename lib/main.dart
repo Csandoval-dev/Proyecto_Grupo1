@@ -40,7 +40,7 @@ class _CorelifeAppState extends State<CorelifeApp> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator());
     }
 
     return MaterialApp(
