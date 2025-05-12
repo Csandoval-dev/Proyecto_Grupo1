@@ -62,4 +62,6 @@ class AuthService {
   }
 
   signInWithGoogle() {}
+
+  signInWithGitHub() {}
 }

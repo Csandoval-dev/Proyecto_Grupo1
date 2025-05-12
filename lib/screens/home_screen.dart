@@ -1,31 +1,37 @@
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
-import 'login_screen.dart';
+import 'package:go_router/go_router.dart';
 
 class HomeScreen extends StatelessWidget {
-  final _authService = AuthService();
-
-  void _logout(BuildContext context) async {
-    await _authService.signOut();
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => LoginScreen()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Home')),
+      appBar: AppBar(
+        title: Text('Inicio'),
+        backgroundColor: Color(0xFF6A1B9A),
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('Welcome to Corelife!'),
+            Text(
+              '¡Bienvenido a Corelife!',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF6A1B9A),
+              ),
+            ),
             SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () => _logout(context),
-              child: Text('Logout'),
+              onPressed: () => context.go('/login'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              ),
+              child: Text(
+                'Cerrar sesión',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -33,4 +39,3 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-

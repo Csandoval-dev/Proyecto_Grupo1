@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
-import 'firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'services/auth_service.dart';
+import 'router/app_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,12 +42,12 @@ class _CorelifeAppState extends State<CorelifeApp> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Corelife',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: _isLoggedIn ? HomeScreen() : LoginScreen(),
+      routerConfig: AppRouter.router,
     );
   }
 }
