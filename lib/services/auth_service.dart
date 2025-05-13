@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -5,6 +7,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // Comentamos la inicialización para evitar la advertencia
+  // final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   // Registrar con email y contraseña
   Future<User?> signUpWithEmail(String email, String password) async {
@@ -21,8 +25,12 @@ class AuthService {
       });
 
       return userCredential.user;
+    } on FirebaseAuthException catch (e) {
+      // Manejo específico de errores de Firebase Auth
+      print('Error de Firebase Auth al registrarse: ${e.code} - ${e.message}');
+      return null;
     } catch (e) {
-      print('Error al registrarse: $e');
+      print('Error general al registrarse: $e');
       return null;
     }
   }
@@ -34,9 +42,14 @@ class AuthService {
         email: email,
         password: password,
       );
+      print('Inicio de sesión exitoso: ${userCredential.user?.email}');
       return userCredential.user;
+    } on FirebaseAuthException catch (e) {
+      // Manejo específico de errores de Firebase Auth
+      print('Error de Firebase Auth al iniciar sesión: ${e.code} - ${e.message}');
+      return null;
     } catch (e) {
-      print('Error al iniciar sesión: $e');
+      print('Error general al iniciar sesión: $e');
       return null;
     }
   }
@@ -44,11 +57,23 @@ class AuthService {
   // Cerrar sesión
   Future<void> signOut() async {
     try {
+      // Si el usuario inició sesión con Google, también cerramos esa sesión
+      // Ya que comentamos la inicialización, también comentamos esta parte
+      // if (await _googleSignIn.isSignedIn()) {
+      //   await _googleSignIn.signOut();
+      // }
       await _auth.signOut();
       print('Sesión cerrada correctamente');
     } catch (e) {
       print('Error al cerrar sesión: $e');
     }
+  }
+
+  // Iniciar sesión con Google (mantenemos la función pero por ahora devuelve null)
+  Future<User?> signInWithGoogle() async {
+    // Por ahora, esta función no hace nada
+    print('Función de inicio de sesión con Google no implementada');
+    return null;
   }
 
   // Obtener el usuario actual
@@ -60,8 +85,4 @@ class AuthService {
   Future<bool> isUserLoggedIn() async {
     return _auth.currentUser != null;
   }
-
-  signInWithGoogle() {}
-
-  signInWithGitHub() {}
 }

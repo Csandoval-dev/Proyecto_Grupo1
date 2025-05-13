@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../services/auth_service.dart'; // Ajusta esta ruta según tu estructura
 
 class RegisterScreen extends StatefulWidget {
   @override
@@ -13,22 +14,48 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
+  String? _errorMessage;
+  
+  // Instancia del servicio de autenticación
+  final AuthService _authService = AuthService();
 
   void _register() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
+        _errorMessage = null;
       });
 
-      // Simulación de registro
-      await Future.delayed(Duration(seconds: 2));
+      try {
+        final user = await _authService.signUpWithEmail(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
+        );
 
-      setState(() {
-        _isLoading = false;
-      });
+        setState(() {
+          _isLoading = false;
+        });
 
-      // Navegar al login después del registro
-      context.go('/login');
+        if (user != null) {
+          // Navegar al login después del registro exitoso
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Registro exitoso. Inicia sesión para continuar.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          context.go('/login');
+        } else {
+          setState(() {
+            _errorMessage = 'No se pudo completar el registro. Intenta de nuevo.';
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Error: ${e.toString()}';
+        });
+      }
     }
   }
 
@@ -97,6 +124,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           return null;
                         },
                       ),
+                      // Mostrar mensaje de error si existe
+                      if (_errorMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16.0),
+                          child: Text(
+                            _errorMessage!,
+                            style: TextStyle(color: Colors.red),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
                     ],
                   ),
                 ),
