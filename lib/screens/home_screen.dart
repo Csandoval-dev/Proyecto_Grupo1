@@ -1,3 +1,4 @@
+import 'package:corelife/widgets/drawer.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,7 +9,9 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text('Inicio'),
         backgroundColor: Color(0xFF6A1B9A),
+        
       ),
+      drawer: const MenuDrawer(),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
