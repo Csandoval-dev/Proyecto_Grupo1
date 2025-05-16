@@ -133,8 +133,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
           ),
-          // Usa este comentario como guía para reemplazar con Image.asset
-          // child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
           child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
         ).animate()
           .scale(duration: 600.ms, curve: Curves.easeOut)
@@ -344,14 +342,16 @@ class _LoginScreenState extends State<LoginScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        // Cambiado a color blanco para el botón de Google
         _buildSocialButton(
           icon: FontAwesomeIcons.google,
-          color: Colors.red,
+          color: Colors.white, // Cambiado de rojo a blanco
           size: buttonSize,
           iconSize: iconSize,
           onPressed: () {
             // Por ahora sólo visual
           },
+          iconColor: Colors.red, // Color del icono para que sea visible en fondo blanco
         ),
         SizedBox(width: isSmallScreen ? 16 : 20),
         _buildSocialButton(
@@ -364,16 +364,16 @@ class _LoginScreenState extends State<LoginScreen> {
           },
         ),
         SizedBox(width: isSmallScreen ? 16 : 20),
-        // Cambiado el icono de Apple por uno más profesional
+        // Cambiado por el ícono de GitHub
         _buildSocialButton(
-          icon: FontAwesomeIcons.solidCircleUser,
-          color: Colors.white,
+          icon: FontAwesomeIcons.github, // Cambiado a GitHub
+          color: Colors.black, // Color negro típico de GitHub
           size: buttonSize,
           iconSize: iconSize,
           onPressed: () {
             // Por ahora sólo visual
           },
-          iconColor: Colors.black,
+          iconColor: Colors.white, // Color del icono para que sea visible en fondo negro
         ),
       ],
     );
