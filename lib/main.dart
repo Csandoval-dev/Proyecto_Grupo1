@@ -20,7 +20,6 @@ class CorelifeApp extends StatefulWidget {
 class _CorelifeAppState extends State<CorelifeApp> {
   final AuthService _authService = AuthService();
   bool _isLoading = true;
-  bool _isLoggedIn = false;
 
   @override
   void initState() {
@@ -31,7 +30,6 @@ class _CorelifeAppState extends State<CorelifeApp> {
   void _checkLoginStatus() async {
     bool isLoggedIn = await _authService.isUserLoggedIn();
     setState(() {
-      _isLoggedIn = isLoggedIn;
       _isLoading = false;
     });
   }

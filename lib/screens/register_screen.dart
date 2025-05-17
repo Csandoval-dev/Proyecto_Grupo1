@@ -3,7 +3,10 @@ import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart'; // Ajusta esta ruta según tu estructura
 
 class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
+
   @override
+  // ignore: library_private_types_in_public_api
   _RegisterScreenState createState() => _RegisterScreenState();
 }
 
@@ -39,7 +42,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         if (user != null) {
           // Navegar al login después del registro exitoso
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Text('Registro exitoso. Inicia sesión para continuar.'),
               backgroundColor: Colors.green,
             ),
@@ -70,7 +73,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(height: 40),
+                const SizedBox(height: 40),
                 // Logo
                 Center(
                   child: Image.asset(
@@ -78,9 +81,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     height: 100,
                   ),
                 ),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
                 // Título
-                Center(
+                const Center(
                   child: Text(
                     "Crea tu cuenta",
                     style: TextStyle(
@@ -90,7 +93,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ),
                 ),
-                SizedBox(height: 30),
+                const SizedBox(height: 30),
                 Form(
                   key: _formKey,
                   child: Column(
@@ -102,7 +105,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         icon: Icons.email,
                         isPassword: false,
                       ),
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
                       // Campo de contraseña
                       _buildTextField(
                         controller: _passwordController,
@@ -110,7 +113,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         icon: Icons.lock,
                         isPassword: true,
                       ),
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
                       // Campo de confirmación de contraseña
                       _buildTextField(
                         controller: _confirmPasswordController,
@@ -130,36 +133,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           padding: const EdgeInsets.only(top: 16.0),
                           child: Text(
                             _errorMessage!,
-                            style: TextStyle(color: Colors.red),
+                            style: const TextStyle(color: Colors.red),
                             textAlign: TextAlign.center,
                           ),
                         ),
                     ],
                   ),
                 ),
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
                 // Botón de registro
                 ElevatedButton(
                   onPressed: _isLoading ? null : _register,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF6A1B9A),
-                    padding: EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: const Color(0xFF6A1B9A),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   child: _isLoading
-                      ? CircularProgressIndicator(color: Colors.white)
-                      : Text(
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
                           'Registrarse',
                           style: TextStyle(color: Colors.white, fontSize: 16),
                         ),
                 ),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
                 // Enlace para volver a login
                 TextButton(
                   onPressed: () => context.go('/login'),
-                  child: Text(
+                  child: const Text(
                     '¿Ya tienes una cuenta? Inicia sesión',
                     style: TextStyle(color: Color(0xFF6A1B9A)),
                   ),
@@ -183,12 +186,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       controller: controller,
       obscureText: isPassword ? !_isPasswordVisible : false,
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: Color(0xFF6A1B9A)),
+        prefixIcon: Icon(icon, color: const Color(0xFF6A1B9A)),
         suffixIcon: isPassword
             ? IconButton(
                 icon: Icon(
                   _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                  color: Color(0xFF6A1B9A),
+                  color: const Color(0xFF6A1B9A),
                 ),
                 onPressed: () {
                   setState(() {

@@ -1,0 +1,2 @@
+C:/Users/User/Desktop/Q2_2025Carlos/IngenieriaSoftwareII/Proyecto_Grupo1/android/app/.cxx/Debug/6a5i5357/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/Users/User/Desktop/Q2_2025Carlos/IngenieriaSoftwareII/Proyecto_Grupo1/android/app/.cxx/Debug/6a5i5357/armeabi-v7a/CMakeFiles/rebuild_cache.dir
