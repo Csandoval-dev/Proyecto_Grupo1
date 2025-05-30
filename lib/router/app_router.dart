@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';
 import '../screens/home_screen.dart';
+import '../screens/chatbot_screen.dart';
+
+
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -19,6 +22,10 @@ class AppRouter {
         path: '/home',
         builder: (context, state) => HomeScreen(),
       ),
+      GoRoute(
+       path: '/chatbot',
+        builder: (context, state) => const ChatbotScreen(),
+),
     ],
     initialLocation: '/login',
   );

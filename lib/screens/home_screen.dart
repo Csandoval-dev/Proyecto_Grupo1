@@ -14,6 +14,7 @@ class HomeScreen extends StatelessWidget {
             letterSpacing: 0.3,
           ),
         ),
+        
         backgroundColor: const Color(0xFFDEA4CE), // Rosa pastel principal
         elevation: 0, // Sin sombra para un look más moderno
         centerTitle: true, // Título centrado
