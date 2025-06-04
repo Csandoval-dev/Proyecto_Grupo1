@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/chatbot_message.dart';
+import '../models/chat_conversation.dart';
 import '../services/chatbot_service.dart';
+import '../widgets/conversation_list.dart';
+import '../widgets/chat_message.dart';
 
 class ChatbotScreen extends StatefulWidget {
   const ChatbotScreen({Key? key}) : super(key: key);
@@ -15,8 +18,19 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   final ScrollController _scrollController = ScrollController();
   final ChatbotService _chatbotService = ChatbotService();
   final String userId = FirebaseAuth.instance.currentUser?.uid ?? '';
-  
+
+  List<ChatConversation> _conversations = [];
+  String _currentConversationId = '';
   bool _isLoading = false;
+  String _userName = 'Usuario';
+  bool _showConversationList = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserName();
+    _loadConversations();
+  }
 
   @override
   void dispose() {
@@ -25,23 +39,92 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     super.dispose();
   }
 
+  Future<void> _loadUserName() async {
+    final name = await _chatbotService.getUserName(userId);
+    setState(() {
+      _userName = name;
+    });
+  }
+
+  void _loadConversations() {
+    _chatbotService.getConversations(userId).listen((conversations) {
+      setState(() {
+        _conversations = conversations;
+        if (_currentConversationId.isEmpty && conversations.isNotEmpty) {
+          _currentConversationId = conversations.first.id;
+        }
+      });
+    });
+  }
+
+  void _startNewChat() async {
+    final newConversation = await _chatbotService.createNewConversation(userId);
+    setState(() {
+      _currentConversationId = newConversation.id;
+      if (!_conversations.any((conv) => conv.id == newConversation.id)) {
+        _conversations = [newConversation, ..._conversations];
+      }
+    });
+  }
+
+  void _deleteConversation(String conversationId) async {
+    await _chatbotService.deleteConversation(userId, conversationId);
+    if (_currentConversationId == conversationId && _conversations.length > 1) {
+      setState(() {
+        _currentConversationId = _conversations
+            .where((conv) => conv.id != conversationId)
+            .first
+            .id;
+      });
+    }
+  }
+
   Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty) return;
+    if (_messageController.text.trim().isEmpty || _isLoading) return;
 
     final messageText = _messageController.text.trim();
     _messageController.clear();
-    
+
+    final userMessage = ChatbotMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      message: messageText,
+      isUser: true,
+      timestamp: DateTime.now(),
+    );
+
     setState(() {
       _isLoading = true;
+      final tempBotMessage = ChatbotMessage(
+        id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+        message: '',
+        isUser: false,
+        timestamp: DateTime.now(),
+      );
+      
+      final currentConversation = _conversations.firstWhere(
+        (conv) => conv.id == _currentConversationId,
+        orElse: () => ChatConversation.create(),
+      );
+
+      final updatedConversation = currentConversation
+          .addMessage(userMessage)
+          .addMessage(tempBotMessage);
+
+      _conversations = _conversations.map((conv) {
+        return conv.id == _currentConversationId ? updatedConversation : conv;
+      }).toList();
     });
 
+    _scrollToBottom();
+
     try {
-      await _chatbotService.sendMessage(userId, messageText);
-      _scrollToBottom();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
+      await _chatbotService.sendMessage(
+        userId,
+        messageText,
+        conversationId: _currentConversationId,
       );
+    } catch (e) {
+      _showErrorMessage();
     } finally {
       setState(() {
         _isLoading = false;
@@ -61,129 +144,138 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     });
   }
 
+  void _showErrorMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Error al enviar el mensaje'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  void _handleOptionSelected(String option) {
+    _messageController.text = option.replaceAll(RegExp(r'[\[\]]'), '');
+    _sendMessage();
+  }
+
+  void _toggleConversationList() {
+    setState(() {
+      _showConversationList = !_showConversationList;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final currentConversation = _conversations.firstWhere(
+      (conv) => conv.id == _currentConversationId,
+      orElse: () => ChatConversation.create(),
+    );
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('CoreLife AI'),
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: _toggleConversationList,
+        ),
+        title: const Text('CoreLife Catalyst'),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
       ),
-      body: Column(
+      body: Row(
         children: [
-          Expanded(
-            child: StreamBuilder<List<ChatbotMessage>>(
-              stream: _chatbotService.getChatHistory(userId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final messages = snapshot.data ?? [];
-                
-                if (messages.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      '¡Hola! Soy tu asistente personal de CoreLife.\n¿En qué puedo ayudarte hoy? 😊',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    return _MessageBubble(message: message);
-                  },
-                );
+          if (_showConversationList)
+            ConversationList(
+              conversations: _conversations,
+              currentConversationId: _currentConversationId,
+              onConversationSelected: (id) {
+                setState(() {
+                  _currentConversationId = id;
+                });
               },
+              onNewChat: _startNewChat,
+              onDeleteConversation: _deleteConversation,
             ),
-          ),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: CircularProgressIndicator(),
-            ),
-          _MessageInput(
-            controller: _messageController,
-            onSend: _sendMessage,
-            isLoading: _isLoading,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  final ChatbotMessage message;
-
-  const _MessageBubble({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: message.isUser 
-            ? MainAxisAlignment.end 
-            : MainAxisAlignment.start,
-        children: [
-          if (!message.isUser) ...[
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Theme.of(context).primaryColor,
-              child: const Icon(Icons.smart_toy, color: Colors.white, size: 16),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: message.isUser 
-                    ? Theme.of(context).primaryColor
-                    : Colors.grey[200],
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                message.message,
-                style: TextStyle(
-                  color: message.isUser ? Colors.white : Colors.black87,
+          Expanded(
+            child: Column(
+              children: [
+                Expanded(
+                  child: currentConversation.messages.isEmpty
+                      ? _buildWelcomeMessage()
+                      : _buildChatMessages(currentConversation),
                 ),
-              ),
+                _buildMessageInput(),
+              ],
             ),
           ),
-          if (message.isUser) ...[
-            const SizedBox(width: 8),
-            const CircleAvatar(
-              radius: 16,
-              child: Icon(Icons.person, size: 16),
-            ),
-          ],
         ],
       ),
     );
   }
-}
 
-class _MessageInput extends StatelessWidget {
-  final TextEditingController controller;
-  final VoidCallback onSend;
-  final bool isLoading;
+  Widget _buildWelcomeMessage() {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        margin: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.blue.shade100),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.smart_toy,
+              size: 64,
+              color: Theme.of(context).primaryColor,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '¡Hola, $_userName! 👋',
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Soy tu CoreLife Catalyst, tu coach personal de hábitos.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '¿En qué puedo ayudarte hoy? 😊',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-  const _MessageInput({
-    required this.controller,
-    required this.onSend,
-    required this.isLoading,
-  });
+  Widget _buildChatMessages(ChatConversation conversation) {
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      itemCount: conversation.messages.length,
+      itemBuilder: (context, index) {
+        final message = conversation.messages[index];
+        final isLastMessage = index == conversation.messages.length - 1;
+        
+        return ChatMessageWidget(
+          key: ValueKey(message.id),
+          message: message,
+          isTyping: _isLoading && isLastMessage && !message.isUser,
+          onOptionSelected: _handleOptionSelected,
+        );
+      },
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildMessageInput() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -201,23 +293,41 @@ class _MessageInput extends StatelessWidget {
         children: [
           Expanded(
             child: TextField(
-              controller: controller,
-              decoration: const InputDecoration(
+              controller: _messageController,
+              decoration: InputDecoration(
                 hintText: 'Pregúntame algo...',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
-              enabled: !isLoading,
-              onSubmitted: (_) => onSend(),
+              enabled: !_isLoading,
+              onSubmitted: (_) => _sendMessage(),
+              textInputAction: TextInputAction.send,
             ),
           ),
           const SizedBox(width: 8),
-          IconButton(
-            onPressed: isLoading ? null : onSend,
-            icon: const Icon(Icons.send),
-            style: IconButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Colors.white,
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).primaryColor,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              onPressed: _isLoading ? null : _sendMessage,
+              icon: _isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.send),
+              color: Colors.white,
             ),
           ),
         ],

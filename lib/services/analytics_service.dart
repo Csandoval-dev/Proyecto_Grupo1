@@ -5,9 +5,8 @@ class AnalyticsService {
 
   Future<Map<String, dynamic>> getUserContext(String userId) async {
     try {
-      // Obtener información del usuario
       final userDoc = await _firestore
-          .collection('usuarios') 
+          .collection('Usuarios')
           .doc(userId)
           .get();
 
@@ -16,26 +15,26 @@ class AnalyticsService {
       }
 
       final userData = userDoc.data()!;
-      final userName = userData['usuario'] ?? 'Usuario';
+      final userName = userData['usuario'] ?? 
+                      userData['email']?.split('@')[0] ?? 
+                      'Usuario';
 
       // Obtener hábitos del usuario
       final habitsSnapshot = await _firestore
-          .collection('usuarios')
+          .collection('Usuarios')
           .doc(userId)
           .collection('habits')
           .get();
 
-      // Obtener métricas de la última semana
-      final metricsSnapshot = await _firestore
-          .collection('usuarios')
-          .doc(userId)
-          .collection('metrics')
-          .where('startDate', isGreaterThan: _getWeekAgo())
-          .get();
+      // Obtener métricas con ventana de tiempo ajustable
+      final metricsSnapshot = await _getMetricsWithTimeWindow(userId);
 
-      final analysisResult = _analyzeUserData(habitsSnapshot.docs, metricsSnapshot.docs);
+      final analysisResult = await _analyzeUserData(
+        habitsSnapshot.docs, 
+        metricsSnapshot.docs,
+        userId,
+      );
       
-      // Agregar información del usuario
       analysisResult['userName'] = userName;
       
       return analysisResult;
@@ -45,16 +44,67 @@ class AnalyticsService {
     }
   }
 
-  Map<String, dynamic> _analyzeUserData(
+  Future<QuerySnapshot> _getMetricsWithTimeWindow(String userId) async {
+    // Obtener métricas de las últimas 4 semanas para análisis de tendencias
+    final fourWeeksAgo = DateTime.now().subtract(const Duration(days: 28));
+    
+    return await _firestore
+        .collection('Usuarios')
+        .doc(userId)
+        .collection('metrics')
+        .where('startDate', isGreaterThan: fourWeeksAgo)
+        .orderBy('startDate', descending: true)
+        .get();
+  }
+
+  Future<Map<String, dynamic>> _analyzeUserData(
     List<QueryDocumentSnapshot> habits,
     List<QueryDocumentSnapshot> metrics,
-  ) {
+    String userId,
+  ) async {
     final activeHabits = habits.where((h) => h.data() != null).toList();
+    final Map<String, List<double>> habitTrends = {};
+    final Map<String, String> bestTimeForHabits = {};
     
-    // Calcular tasa de cumplimiento general
+    // Análisis de tendencias por hábito
+    for (final habit in activeHabits) {
+      final habitData = habit.data() as Map<String, dynamic>;
+      final habitId = habit.id;
+      final habitMetrics = metrics.where(
+        (m) => (m.data() as Map<String, dynamic>)['habitId'] == habitId
+      ).toList();
+      
+      habitTrends[habitId] = _calculateTrend(habitMetrics);
+      bestTimeForHabits[habitId] = await _analyzeBestTime(userId, habitId);
+    }
+
+    // Calcular métricas generales
+    final generalStats = _calculateGeneralStats(metrics, activeHabits);
+    
+    // Identificar patrones y sugerencias
+    final patterns = _identifyPatterns(
+      metrics, 
+      habitTrends,
+      bestTimeForHabits,
+    );
+
+    return {
+      ...generalStats,
+      'habitTrends': habitTrends,
+      'bestTimes': bestTimeForHabits,
+      'patterns': patterns,
+      'lastAnalysis': DateTime.now().toIso8601String(),
+    };
+  }
+
+  Map<String, dynamic> _calculateGeneralStats(
+    List<QueryDocumentSnapshot> metrics,
+    List<QueryDocumentSnapshot> habits,
+  ) {
     double totalCompletion = 0;
     List<String> strugglingHabits = [];
     List<String> bestHabits = [];
+    Map<String, double> weeklyProgress = {};
 
     for (final metric in metrics) {
       final data = metric.data() as Map<String, dynamic>;
@@ -66,13 +116,14 @@ class AnalyticsService {
         final completionRate = (done / total) * 100;
         totalCompletion += completionRate;
 
-        // Encontrar el hábito correspondiente
         final habitId = data['habitId'];
-        final habit = activeHabits.where((h) => h.id == habitId).firstOrNull;
+        final habit = habits.where((h) => h.id == habitId).firstOrNull;
         
         if (habit != null) {
-          final habitName = habit.data() as Map<String, dynamic>;
-          final name = habitName['name'] ?? 'Hábito';
+          final habitData = habit.data() as Map<String, dynamic>;
+          final name = habitData['name'] ?? 'Hábito';
+          
+          weeklyProgress[name] = completionRate;
           
           if (completionRate < 50) {
             strugglingHabits.add(name);
@@ -83,15 +134,107 @@ class AnalyticsService {
       }
     }
 
-    final averageCompletion = metrics.isNotEmpty ? totalCompletion / metrics.length : 0;
-
     return {
-      'totalHabits': activeHabits.length,
-      'weeklyCompletionRate': averageCompletion,
+      'totalHabits': habits.length,
+      'weeklyCompletionRate': metrics.isNotEmpty ? totalCompletion / metrics.length : 0,
       'strugglingHabits': strugglingHabits,
       'bestHabits': bestHabits,
-      'totalMetrics': metrics.length,
+      'weeklyProgress': weeklyProgress,
     };
+  }
+
+  List<double> _calculateTrend(List<QueryDocumentSnapshot> habitMetrics) {
+    // Calcular tendencia de las últimas 4 semanas
+    List<double> weeklyRates = [];
+    
+    for (final metric in habitMetrics) {
+      final data = metric.data() as Map<String, dynamic>;
+      final done = data['countDone'] ?? 0;
+      final missed = data['countMissed'] ?? 0;
+      final total = done + missed;
+      
+      if (total > 0) {
+        weeklyRates.add((done / total) * 100);
+      }
+    }
+    
+    return weeklyRates;
+  }
+
+  Future<String> _analyzeBestTime(String userId, String habitId) async {
+    // Analizar los mejores momentos de cumplimiento
+    final logs = await _firestore
+        .collection('Usuarios')
+        .doc(userId)
+        .collection('habits')
+        .doc(habitId)
+        .collection('logs')
+        .where('status', isEqualTo: 'completed')
+        .orderBy('logDate', descending: true)
+        .limit(30)
+        .get();
+
+    if (logs.docs.isEmpty) return 'No hay suficientes datos';
+
+    Map<String, int> timeDistribution = {};
+    
+    for (final log in logs.docs) {
+      final data = log.data();
+      final logDate = (data['logDate'] as Timestamp).toDate();
+      final timeBlock = _getTimeBlock(logDate);
+      
+      timeDistribution[timeBlock] = (timeDistribution[timeBlock] ?? 0) + 1;
+    }
+
+    return timeDistribution.entries
+        .reduce((a, b) => a.value > b.value ? a : b)
+        .key;
+  }
+
+  String _getTimeBlock(DateTime date) {
+    final hour = date.hour;
+    if (hour >= 5 && hour < 12) return 'mañana';
+    if (hour >= 12 && hour < 18) return 'tarde';
+    if (hour >= 18 && hour < 22) return 'noche';
+    return 'noche tarde';
+  }
+
+  Map<String, dynamic> _identifyPatterns(
+    List<QueryDocumentSnapshot> metrics,
+    Map<String, List<double>> trends,
+    Map<String, String> bestTimes,
+  ) {
+    final patterns = <String, dynamic>{};
+    
+    // Analizar tendencias generales
+    for (final entry in trends.entries) {
+      final trend = entry.value;
+      if (trend.length >= 2) {
+        final recentTrend = trend.take(2).toList();
+        if (recentTrend[0] > recentTrend[1] + 10) {
+          patterns['improving'] = true;
+        } else if (recentTrend[0] < recentTrend[1] - 10) {
+          patterns['declining'] = true;
+        }
+      }
+    }
+
+    // Identificar patrones de tiempo
+    final timePatterns = bestTimes.values.toList();
+    if (timePatterns.isNotEmpty) {
+      final mostCommonTime = timePatterns
+          .fold<Map<String, int>>({}, (map, time) {
+            map[time] = (map[time] ?? 0) + 1;
+            return map;
+          })
+          .entries
+          .reduce((a, b) => a.value > b.value ? a : b)
+          .key;
+      
+      patterns['preferredTime'] = mostCommonTime;
+    }
+
+    return patterns;
   }
 
   Map<String, dynamic> _getDefaultContext() {
@@ -101,11 +244,10 @@ class AnalyticsService {
       'weeklyCompletionRate': 0.0,
       'strugglingHabits': <String>[],
       'bestHabits': <String>[],
-      'totalMetrics': 0,
+      'habitTrends': <String, List<double>>{},
+      'bestTimes': <String, String>{},
+      'patterns': <String, dynamic>{},
+      'lastAnalysis': DateTime.now().toIso8601String(),
     };
-  }
-
-  DateTime _getWeekAgo() {
-    return DateTime.now().subtract(const Duration(days: 7));
   }
 }
