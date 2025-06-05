@@ -14,7 +14,7 @@ class HabitService {
   CollectionReference? get _habitsCollection {
     if (_currentUserId == null) return null;
     return _firestore
-        .collection('usuarios')
+        .collection('Usuarios')
         .doc(_currentUserId)
         .collection('habits');
   }

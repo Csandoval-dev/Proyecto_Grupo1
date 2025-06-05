@@ -23,7 +23,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   String _currentConversationId = '';
   bool _isLoading = false;
   String _userName = 'Usuario';
-  bool _showConversationList = true;
+  bool _showConversationList = false; // Cambiar a false por defecto
 
   @override
   void initState() {
@@ -64,6 +64,10 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       if (!_conversations.any((conv) => conv.id == newConversation.id)) {
         _conversations = [newConversation, ..._conversations];
       }
+      // En móvil, cerrar el sidebar después de crear nuevo chat
+      if (MediaQuery.of(context).size.width < 768) {
+        _showConversationList = false;
+      }
     });
   }
 
@@ -94,22 +98,17 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
     setState(() {
       _isLoading = true;
-      final tempBotMessage = ChatbotMessage(
-        id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-        message: '',
-        isUser: false,
-        timestamp: DateTime.now(),
-      );
-      
-      final currentConversation = _conversations.firstWhere(
-        (conv) => conv.id == _currentConversationId,
-        orElse: () => ChatConversation.create(),
-      );
+    });
 
-      final updatedConversation = currentConversation
-          .addMessage(userMessage)
-          .addMessage(tempBotMessage);
+    // Añadir mensaje del usuario inmediatamente
+    final currentConversation = _conversations.firstWhere(
+      (conv) => conv.id == _currentConversationId,
+      orElse: () => ChatConversation.create(),
+    );
 
+    final updatedConversation = currentConversation.addMessage(userMessage);
+
+    setState(() {
       _conversations = _conversations.map((conv) {
         return conv.id == _currentConversationId ? updatedConversation : conv;
       }).toList();
@@ -146,9 +145,13 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
   void _showErrorMessage() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Error al enviar el mensaje'),
+      SnackBar(
+        content: const Text('Error al enviar el mensaje'),
         backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
       ),
     );
   }
@@ -166,47 +169,125 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+    final isTablet = screenWidth >= 768 && screenWidth < 1024;
+    
     final currentConversation = _conversations.firstWhere(
       (conv) => conv.id == _currentConversationId,
       orElse: () => ChatConversation.create(),
     );
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F7F8),
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: _toggleConversationList,
-        ),
-        title: const Text('CoreLife Catalyst'),
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
-      ),
-      body: Row(
-        children: [
-          if (_showConversationList)
-            ConversationList(
-              conversations: _conversations,
-              currentConversationId: _currentConversationId,
-              onConversationSelected: (id) {
-                setState(() {
-                  _currentConversationId = id;
-                });
-              },
-              onNewChat: _startNewChat,
-              onDeleteConversation: _deleteConversation,
-            ),
-          Expanded(
-            child: Column(
-              children: [
-                Expanded(
-                  child: currentConversation.messages.isEmpty
-                      ? _buildWelcomeMessage()
-                      : _buildChatMessages(currentConversation),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        title: Row(
+          children: [
+            if (isMobile) ...[
+              IconButton(
+                icon: Icon(
+                  _showConversationList ? Icons.close : Icons.menu,
+                  color: Colors.black87,
                 ),
-                _buildMessageInput(),
-              ],
+                onPressed: _toggleConversationList,
+              ),
+              const SizedBox(width: 8),
+            ],
+            Icon(
+              Icons.smart_toy,
+              color: Theme.of(context).primaryColor,
+              size: 28,
             ),
+            const SizedBox(width: 8),
+            const Text(
+              'CoreLife Catalyst',
+              style: TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+                fontSize: 20,
+              ),
+            ),
+          ],
+        ),
+        automaticallyImplyLeading: false,
+        actions: [
+          if (!isMobile)
+            IconButton(
+              icon: Icon(
+                _showConversationList ? Icons.close : Icons.menu,
+                color: Colors.black87,
+              ),
+              onPressed: _toggleConversationList,
+            ),
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.black87),
+            onPressed: _startNewChat,
           ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Stack(
+        children: [
+          // Chat principal
+          Column(
+            children: [
+              Expanded(
+                child: currentConversation.messages.isEmpty
+                    ? _buildWelcomeMessage()
+                    : _buildChatMessages(currentConversation),
+              ),
+              _buildMessageInput(),
+            ],
+          ),
+          
+          // Sidebar de conversaciones
+          if (_showConversationList)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Container(
+                width: isMobile ? screenWidth * 0.85 : 320,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(2, 0),
+                    ),
+                  ],
+                ),
+                child: ConversationList(
+                  conversations: _conversations,
+                  currentConversationId: _currentConversationId,
+                  onConversationSelected: (id) {
+                    setState(() {
+                      _currentConversationId = id;
+                      if (isMobile) {
+                        _showConversationList = false;
+                      }
+                    });
+                  },
+                  onNewChat: _startNewChat,
+                  onDeleteConversation: _deleteConversation,
+                ),
+              ),
+            ),
+          
+          // Overlay para cerrar sidebar en móvil
+          if (_showConversationList && isMobile)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => setState(() => _showConversationList = false),
+                child: Container(
+                  color: Colors.black.withOpacity(0.3),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -215,40 +296,73 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   Widget _buildWelcomeMessage() {
     return Center(
       child: Container(
-        padding: const EdgeInsets.all(24),
-        margin: const EdgeInsets.all(16),
+        constraints: const BoxConstraints(maxWidth: 600),
+        padding: const EdgeInsets.all(32),
+        margin: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Colors.blue.shade50,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.blue.shade100),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.smart_toy,
-              size: 64,
-              color: Theme.of(context).primaryColor,
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.smart_toy,
+                size: 48,
+                color: Theme.of(context).primaryColor,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Text(
               '¡Hola, $_userName! 👋',
               style: const TextStyle(
-                fontSize: 24,
+                fontSize: 28,
                 fontWeight: FontWeight.bold,
+                color: Colors.black87,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             const Text(
               'Soy tu CoreLife Catalyst, tu coach personal de hábitos.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16),
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.black54,
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              '¿En qué puedo ayudarte hoy? 😊',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F9FF),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFE0F2FE),
+                ),
+              ),
+              child: const Text(
+                '¿En qué puedo ayudarte hoy? 😊',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF0369A1),
+                ),
+              ),
             ),
           ],
         ),
@@ -257,21 +371,37 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   }
 
   Widget _buildChatMessages(ChatConversation conversation) {
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(16),
-      itemCount: conversation.messages.length,
-      itemBuilder: (context, index) {
-        final message = conversation.messages[index];
-        final isLastMessage = index == conversation.messages.length - 1;
-        
-        return ChatMessageWidget(
-          key: ValueKey(message.id),
-          message: message,
-          isTyping: _isLoading && isLastMessage && !message.isUser,
-          onOptionSelected: _handleOptionSelected,
-        );
-      },
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 800),
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        itemCount: conversation.messages.length + (_isLoading ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (_isLoading && index == conversation.messages.length) {
+            // Mostrar indicador de carga como mensaje del bot
+            return ChatMessageWidget(
+              key: const ValueKey('loading'),
+              message: ChatbotMessage(
+                id: 'loading',
+                message: '',
+                isUser: false,
+                timestamp: DateTime.now(),
+              ),
+              isTyping: true,
+              onOptionSelected: _handleOptionSelected,
+            );
+          }
+          
+          final message = conversation.messages[index];
+          return ChatMessageWidget(
+            key: ValueKey(message.id),
+            message: message,
+            isTyping: false,
+            onOptionSelected: _handleOptionSelected,
+          );
+        },
+      ),
     );
   }
 
@@ -282,55 +412,74 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, -3),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              decoration: InputDecoration(
-                hintText: 'Pregúntame algo...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(25),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+      child: SafeArea(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Row(
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F7F8),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: _isLoading 
+                          ? Colors.grey.shade300 
+                          : Colors.transparent,
+                    ),
+                  ),
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: const InputDecoration(
+                      hintText: 'Escribe tu mensaje...',
+                      hintStyle: TextStyle(color: Colors.grey),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                    ),
+                    enabled: !_isLoading,
+                    onSubmitted: (_) => _sendMessage(),
+                    textInputAction: TextInputAction.send,
+                    maxLines: 4,
+                    minLines: 1,
+                  ),
                 ),
               ),
-              enabled: !_isLoading,
-              onSubmitted: (_) => _sendMessage(),
-              textInputAction: TextInputAction.send,
-            ),
+              const SizedBox(width: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: _isLoading 
+                      ? Colors.grey.shade400 
+                      : Theme.of(context).primaryColor,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  onPressed: _isLoading ? null : _sendMessage,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send_rounded),
+                  color: Colors.white,
+                  splashRadius: 24,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).primaryColor,
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              onPressed: _isLoading ? null : _sendMessage,
-              icon: _isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.send),
-              color: Colors.white,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -20,38 +20,113 @@ class ConversationList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 280,
-      color: const Color(0xFFFFF6FA),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          right: BorderSide(
+            color: Colors.grey.shade200,
+            width: 1,
+          ),
+        ),
+      ),
       child: Column(
         children: [
+          _buildHeader(context),
           _buildNewChatButton(context),
+          const Divider(height: 1),
           Expanded(
             child: conversations.isEmpty
                 ? _buildEmptyState(context)
-                : ListView.builder(
-                    itemCount: conversations.length,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemBuilder: (context, index) {
-                      final conversation = conversations[index];
-                      final isSelected = conversation.id == currentConversationId;
-                      final firstMessage = conversation.messages.isNotEmpty
-                          ? conversation.messages.first.message
-                          : 'Nueva conversación';
-                      final title = conversation.title == 'Nueva conversación'
-                          ? _generateTitle(firstMessage)
-                          : conversation.title;
-
-                      return _ConversationTile(
-                        title: title,
-                        isSelected: isSelected,
-                        onTap: () => onConversationSelected(conversation.id),
-                        lastUpdated: conversation.lastUpdated,
-                        onDelete: () => _confirmDelete(context, conversation.id),
-                      );
-                    },
-                  ),
+                : _buildConversationsList(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.grey.shade200,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.forum_rounded,
+            color: Theme.of(context).primaryColor,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          const Text(
+            'Conversaciones',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewChatButton(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onNewChat,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Theme.of(context).primaryColor,
+                  Theme.of(context).primaryColor.withOpacity(0.8),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context).primaryColor.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.add_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Nueva conversación',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -59,30 +134,37 @@ class ConversationList extends StatelessWidget {
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.chat_bubble_outline,
-              size: 48,
-              color: Colors.grey[400],
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 48,
+                color: Colors.grey.shade400,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Text(
-              'No hay conversaciones',
+              'No hay conversaciones aún',
               style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Inicia una nueva conversación',
+              'Comienza una nueva conversación para empezar a chatear',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[500],
+                color: Colors.grey.shade500,
               ),
               textAlign: TextAlign.center,
             ),
@@ -92,28 +174,28 @@ class ConversationList extends StatelessWidget {
     );
   }
 
-  Widget _buildNewChatButton(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: ElevatedButton(
-        onPressed: onNewChat,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Theme.of(context).primaryColor,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add),
-            SizedBox(width: 8),
-            Text('Nueva conversación'),
-          ],
-        ),
-      ),
+  Widget _buildConversationsList() {
+    return ListView.builder(
+      itemCount: conversations.length,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemBuilder: (context, index) {
+        final conversation = conversations[index];
+        final isSelected = conversation.id == currentConversationId;
+        final firstMessage = conversation.messages.isNotEmpty
+            ? conversation.messages.first.message
+            : 'Nueva conversación';
+        final title = conversation.title == 'Nueva conversación'
+            ? _generateTitle(firstMessage)
+            : conversation.title;
+
+        return _ConversationTile(
+          title: title,
+          isSelected: isSelected,
+          onTap: () => onConversationSelected(conversation.id),
+          lastUpdated: conversation.lastUpdated,
+          onDelete: () => _confirmDelete(context, conversation.id),
+        );
+      },
     );
   }
 
@@ -121,20 +203,44 @@ class ConversationList extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Eliminar conversación'),
-        content: const Text('¿Estás seguro de que quieres eliminar esta conversación?'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.orange.shade600,
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            const Text('Eliminar conversación'),
+          ],
+        ),
+        content: const Text(
+          '¿Estás seguro de que quieres eliminar esta conversación? Esta acción no se puede deshacer.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+              ),
+            ),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               onDeleteConversation(conversationId);
             },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: const Text('Eliminar'),
           ),
@@ -144,13 +250,14 @@ class ConversationList extends StatelessWidget {
   }
 
   String _generateTitle(String message) {
+    if (message.isEmpty) return 'Nueva conversación';
     return message.length > 40
         ? '${message.substring(0, 40)}...'
         : message;
   }
 }
 
-class _ConversationTile extends StatelessWidget {
+class _ConversationTile extends StatefulWidget {
   final String title;
   final bool isSelected;
   final VoidCallback onTap;
@@ -166,60 +273,107 @@ class _ConversationTile extends StatelessWidget {
   });
 
   @override
+  State<_ConversationTile> createState() => _ConversationTileState();
+}
+
+class _ConversationTileState extends State<_ConversationTile> {
+  bool _isHovered = false;
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Material(
-        color: isSelected
-            ? Theme.of(context).primaryColor.withOpacity(0.1)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: isSelected
-                              ? Theme.of(context).primaryColor
-                              : Colors.black87,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: widget.isSelected
+                ? Theme.of(context).primaryColor.withOpacity(0.1)
+                : _isHovered
+                    ? Colors.grey.shade50
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: widget.isSelected
+                ? Border.all(
+                    color: Theme.of(context).primaryColor.withOpacity(0.3),
+                    width: 1,
+                  )
+                : null,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: widget.isSelected
+                            ? Theme.of(context).primaryColor
+                            : Colors.transparent,
+                        shape: BoxShape.circle,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatDate(lastUpdated),
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.title,
+                            style: TextStyle(
+                              color: widget.isSelected
+                                  ? Theme.of(context).primaryColor
+                                  : Colors.black87,
+                              fontWeight: widget.isSelected 
+                                  ? FontWeight.w600 
+                                  : FontWeight.w500,
+                              fontSize: 15,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatDate(widget.lastUpdated),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AnimatedOpacity(
+                      opacity: _isHovered || widget.isSelected ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.delete_outline_rounded,
+                          color: Colors.grey.shade600,
+                          size: 18,
+                        ),
+                        onPressed: widget.onDelete,
+                        splashRadius: 20,
+                        tooltip: 'Eliminar conversación',
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: Icon(
-                    Icons.delete_outline,
-                    color: Colors.grey[600],
-                    size: 20,
-                  ),
-                  onPressed: onDelete,
-                  splashRadius: 24,
-                  tooltip: 'Eliminar conversación',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
+              ),
             ),
           ),
         ),
