@@ -2,12 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/chatbot_message.dart';
 import '../models/chat_conversation.dart';
 import 'openai_service.dart';
-import 'analytics_service.dart';
 
 class ChatbotService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final OpenAIService _openAI = OpenAIService();
-  final AnalyticsService _analytics = AnalyticsService();
   
   CollectionReference<Map<String, dynamic>> _getConversationsRef(String userId) {
     return _firestore
@@ -17,52 +15,162 @@ class ChatbotService {
   }
 
   Future<String> getUserName(String userId) async {
+  try {
+    final userDoc = await _firestore
+        .collection('Usuarios')
+        .doc(userId)
+        .get();
+
+    if (userDoc.exists) {
+      final userData = userDoc.data()!;
+      
+      // Usar el campo 'usuario' que contiene el nombre completo
+      final nombreUsuario = userData['usuario'];
+      if (nombreUsuario != null && nombreUsuario.toString().trim().isNotEmpty) {
+        return nombreUsuario.toString();
+      }
+      
+      // Si por alguna razón no hay usuario, usar el valor por defecto
+      return 'Jose';
+    }
+    return 'Jose';
+  } catch (e) {
+    print('Error obteniendo nombre de usuario: $e');
+    return 'Csandoval-dev';
+  }
+}
+  Future<List<Map<String, dynamic>>> getUserHabits(String userId) async {
     try {
-      final userDoc = await _firestore
+      final habitsSnapshot = await _firestore
           .collection('Usuarios')
           .doc(userId)
+          .collection('habits')
+          .orderBy('createdAt', descending: false)
           .get();
 
-      if (userDoc.exists) {
-        final userData = userDoc.data()!;
-        return userData['nombre'] ?? 
-               userData['usuario'] ?? 
-               userData['email']?.split('@')[0] ?? 
-               'Usuario';
+      List<Map<String, dynamic>> habits = [];
+      
+      for (var doc in habitsSnapshot.docs) {
+        final data = doc.data();
+        habits.add({
+          'id': doc.id,
+          'name': data['name'] ?? 'Hábito sin nombre',
+          'description': data['description'] ?? '',
+          'category': data['category'] ?? 'General',
+          'colorHex': data['colorHex'] ?? '#4285F4',
+          'isActive': _isHabitActive(data),
+        });
       }
-      return 'Usuario';
+
+      return habits.where((habit) => habit['isActive'] == true).toList();
     } catch (e) {
-      print('Error obteniendo nombre de usuario: $e');
-      return 'Usuario';
+      print('Error obteniendo hábitos: $e');
+      return [];
     }
   }
 
-  Future<ChatConversation> getCurrentConversation(String userId) async {
+  bool _isHabitActive(Map<String, dynamic> habitData) {
+    final endDate = habitData['endDate'];
+    if (endDate == null) return true;
+    
+    final endDateTime = (endDate as Timestamp).toDate();
+    return DateTime.now().isBefore(endDateTime);
+  }
+
+  Future<Map<String, dynamic>> getHabitMetrics(String userId, String habitId) async {
     try {
-      final conversationsRef = _getConversationsRef(userId);
-      final snapshot = await conversationsRef
-          .orderBy('lastUpdated', descending: true)
-          .limit(1)
+      final now = DateTime.now();
+      final oneWeekAgo = now.subtract(const Duration(days: 7));
+
+      final metricsSnapshot = await _firestore
+          .collection('Usuarios')
+          .doc(userId)
+          .collection('metrics')
+          .where('habitId', isEqualTo: habitId)
+          .where('date', isGreaterThan: oneWeekAgo)
+          .orderBy('date', descending: true)
+          .limit(7)
           .get();
 
-      if (snapshot.docs.isEmpty) {
-        final newConversation = ChatConversation(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          title: 'Nueva conversación',
-          createdAt: DateTime.now(),
-          lastUpdated: DateTime.now(),
-          messages: [],
-        );
-        await conversationsRef.doc(newConversation.id).set(newConversation.toMap());
-        return newConversation;
+      int totalDone = 0;
+      int totalMissed = 0;
+      
+      for (var doc in metricsSnapshot.docs) {
+        final data = doc.data();
+       totalDone += (data['done'] as int?) ?? 0;
+      totalMissed += (data['missed'] as int?) ?? 0;
+
       }
 
-      return ChatConversation.fromMap(
-        snapshot.docs.first.data(),
-        snapshot.docs.first.id,
-      );
+      final total = totalDone + totalMissed;
+      final completionRate = total > 0 ? (totalDone / total * 100).round() : 0;
+
+      return {
+        'totalDone': totalDone,
+        'totalMissed': totalMissed,
+        'completionRate': completionRate,
+        'weeklyData': metricsSnapshot.docs.length,
+        'lastUpdate': now.toIso8601String(),
+      };
     } catch (e) {
-      print('Error obteniendo conversación actual: $e');
+      print('Error obteniendo métricas: $e');
+      return {
+        'totalDone': 0,
+        'totalMissed': 0,
+        'completionRate': 0,
+        'weeklyData': 0,
+        'lastUpdate': DateTime.now().toIso8601String(),
+      };
+    }
+  }
+
+  Future<ChatConversation> createNewConversation(String userId) async {
+    try {
+      final habits = await getUserHabits(userId);
+      final userName = await getUserName(userId);
+      
+      String welcomeMessage = "¡Hola $userName! 👋\n\n";
+      
+      if (habits.isEmpty) {
+        welcomeMessage += "Soy tu asistente personal. Para empezar a trabajar juntos, " +
+                         "necesitarás agregar algunos hábitos que quieras desarrollar. " +
+                         "Una vez que lo hagas, podré ayudarte a darles seguimiento y " +
+                         "brindarte consejos personalizados.";
+      } else {
+        welcomeMessage += "Estos son tus hábitos activos:\n\n";
+        for (int i = 0; i < habits.length; i++) {
+          final habit = habits[i];
+          welcomeMessage += "${i + 1}. ${habit['name']}";
+          if (habit['description']?.isNotEmpty ?? false) {
+            welcomeMessage += " - ${habit['description']}";
+          }
+          welcomeMessage += "\n";
+        }
+        welcomeMessage += "\n¿Sobre cuál hábito te gustaría conversar? " +
+                         "Puedes escribir el nombre o número del hábito.";
+      }
+      final newConversation = ChatConversation(
+        id: 'conv_${DateTime.now().millisecondsSinceEpoch}',
+        title: 'Nueva conversación',
+        createdAt: DateTime.now(),
+        lastUpdated: DateTime.now(),
+        messages: [
+          ChatbotMessage(
+            id: 'welcome_${DateTime.now().millisecondsSinceEpoch}',
+            message: welcomeMessage,
+            isUser: false,
+            timestamp: DateTime.now(),
+          )
+        ],
+      );
+
+      await _getConversationsRef(userId)
+          .doc(newConversation.id)
+          .set(newConversation.toMap());
+
+      return newConversation;
+    } catch (e) {
+      print('Error creando nueva conversación: $e');
       return ChatConversation.create();
     }
   }
@@ -73,13 +181,11 @@ class ChatbotService {
     String? conversationId,
   }) async {
     try {
-      final userName = await getUserName(userId);
-      
       ChatConversation conversation;
       if (conversationId != null) {
         conversation = await getConversation(userId, conversationId);
       } else {
-        conversation = await getCurrentConversation(userId);
+        conversation = await createNewConversation(userId);
       }
 
       final userMessage = ChatbotMessage(
@@ -89,18 +195,17 @@ class ChatbotService {
         timestamp: DateTime.now(),
       );
 
-      if (conversation.messages.isEmpty) {
+      if (conversation.messages.length <= 1) {
         conversation = conversation.copyWith(
           title: _generateConversationTitle(message),
         );
       }
 
-      final userContext = await _analytics.getUserContext(userId);
-      userContext['userName'] = userName;
-
+      final context = await _prepareHabitContext(userId, message, conversation);
+      
       final botResponse = await _openAI.sendMessage(
         userMessage: message,
-        userContext: userContext,
+        userContext: context,
       );
       
       final botMessage = ChatbotMessage(
@@ -123,22 +228,73 @@ class ChatbotService {
       print('Error en ChatbotService: $e');
       return ChatbotMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        message: 'Lo siento, no pude procesar tu mensaje. ¿Podrías intentar de nuevo?',
+        message: 'Lo siento, hubo un error. ¿Podrías intentar de nuevo?',
         isUser: false,
         timestamp: DateTime.now(),
       );
     }
   }
 
+  Future<Map<String, dynamic>> _prepareHabitContext(
+    String userId, 
+    String userMessage, 
+    ChatConversation conversation
+  ) async {
+    final habits = await getUserHabits(userId);
+    final userName = await getUserName(userId);
+    
+    String? selectedHabitId;
+    Map<String, dynamic>? selectedHabitData;
+    
+    final userMessageLower = userMessage.toLowerCase();
+    
+    // Primero intentar encontrar por número
+    final numberMatch = RegExp(r'^(\d+)').firstMatch(userMessageLower);
+    if (numberMatch != null) {
+      final number = int.parse(numberMatch.group(1)!) - 1;
+      if (number >= 0 && number < habits.length) {
+        selectedHabitId = habits[number]['id'];
+        selectedHabitData = habits[number];
+      }
+    }
+    
+    // Si no se encontró por número, buscar por nombre
+    if (selectedHabitId == null) {
+      for (var habit in habits) {
+        final habitName = habit['name'].toString().toLowerCase();
+        if (userMessageLower.contains(habitName)) {
+          selectedHabitId = habit['id'];
+          selectedHabitData = habit;
+          break;
+        }
+      }
+    }
+
+    Map<String, dynamic> context = {
+      'userName': userName,
+      'totalHabits': habits.length,
+      'habitsList': habits,
+      'currentHabit': selectedHabitData,
+      'conversationHistory': conversation.messages.take(5).map((msg) => {
+        'isUser': msg.isUser,
+        'message': msg.message,
+      }).toList(),
+    };
+
+    if (selectedHabitId != null) {
+      final metrics = await getHabitMetrics(userId, selectedHabitId);
+      context['habitMetrics'] = metrics;
+      context['focusedHabitId'] = selectedHabitId;
+    }
+
+    return context;
+  }
+
   String _generateConversationTitle(String message) {
-    if (message.length <= 40) {
+    if (message.length <= 30) {
       return message;
     }
-    final endOfSentence = message.indexOf('.');
-    if (endOfSentence > 0 && endOfSentence <= 40) {
-      return message.substring(0, endOfSentence);
-    }
-    return message.substring(0, 37) + '...';
+    return message.substring(0, 27) + '...';
   }
 
   Future<ChatConversation> getConversation(
@@ -151,19 +307,20 @@ class ChatbotService {
           .get();
 
       if (!doc.exists) {
-        throw Exception('Conversación no encontrada');
+        return await createNewConversation(userId);
       }
 
       return ChatConversation.fromMap(doc.data()!, doc.id);
     } catch (e) {
       print('Error obteniendo conversación: $e');
-      return ChatConversation.create();
+      return await createNewConversation(userId);
     }
   }
 
   Stream<List<ChatConversation>> getConversations(String userId) {
     return _getConversationsRef(userId)
         .orderBy('lastUpdated', descending: true)
+        .limit(10)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -172,97 +329,28 @@ class ChatbotService {
     });
   }
 
-  Future<void> clearChatHistory(String userId) async {
+  Future<void> deleteConversation(String userId, String conversationId) async {
+    try {
+      await _getConversationsRef(userId)
+          .doc(conversationId)
+          .delete();
+    } catch (e) {
+      print('Error eliminando conversación: $e');
+    }
+  }
+
+  Future<void> clearAllConversations(String userId) async {
     try {
       final batch = _firestore.batch();
-      final conversationsDocs = await _getConversationsRef(userId).get();
+      final conversations = await _getConversationsRef(userId).get();
 
-      for (final doc in conversationsDocs.docs) {
+      for (final doc in conversations.docs) {
         batch.delete(doc.reference);
       }
 
       await batch.commit();
     } catch (e) {
-      print('Error limpiando historial: $e');
-    }
-  }
-
-  Future<String?> generateProactiveInsight(String userId) async {
-    try {
-      final context = await _analytics.getUserContext(userId);
-      final userName = await getUserName(userId);
-      
-      if (context['totalHabits'] == 0) return null;
-      
-      final completionRate = context['weeklyCompletionRate'] as double;
-      final strugglingHabits = context['strugglingHabits'] as List<String>;
-      final patterns = context['patterns'] as Map<String, dynamic>;
-      
-      String proactiveMessage = '';
-      
-      if (completionRate < 30) {
-        proactiveMessage = '¡Hola $userName! 👋 He notado que esta semana has tenido algunos desafíos con tus hábitos (${completionRate.toStringAsFixed(0)}% de cumplimiento). ¿Te gustaría que conversemos sobre cómo mejorar?';
-      } else if (strugglingHabits.isNotEmpty) {
-        proactiveMessage = 'Hola $userName 😊 Veo que "${strugglingHabits.first}" te está costando un poco. ¿Quieres algunos consejos personalizados para hacer que sea más fácil?';
-      } else if (completionRate > 80) {
-        proactiveMessage = '¡Increíble trabajo esta semana, $userName! 🎉 Tienes un ${completionRate.toStringAsFixed(0)}% de cumplimiento. ¿Te sientes listo para un nuevo desafío?';
-      } else if (patterns['declining'] == true) {
-        proactiveMessage = '$userName, he notado una tendencia a la baja en algunos de tus hábitos. 📉 ¿Qué tal si revisamos tu estrategia juntos?';
-      } else if (patterns['improving'] == true) {
-        proactiveMessage = '¡Excelente progreso, $userName! 📈 Tus hábitos están mejorando. ¿Quieres saber qué está funcionando mejor para ti?';
-      }
-      
-      return proactiveMessage.isNotEmpty ? proactiveMessage : null;
-    } catch (e) {
-      print('Error generando insight proactivo: $e');
-      return null;
-    }
-  }
-// Agregar este nuevo método al ChatbotService
-Future<ChatConversation> createNewConversation(String userId) async {
-  try {
-    final conversationsRef = _getConversationsRef(userId);
-    final newConversation = ChatConversation(
-      id: 'conv_${DateTime.now().millisecondsSinceEpoch}',
-      title: 'Nueva conversación',
-      createdAt: DateTime.now(),
-      lastUpdated: DateTime.now(),
-      messages: [],
-    );
-
-    await conversationsRef
-        .doc(newConversation.id)
-        .set(newConversation.toMap());
-
-    return newConversation;
-  } catch (e) {
-    print('Error creando nueva conversación: $e');
-    return ChatConversation.create();
-  }
-}
-
-Future<void> deleteConversation(String userId, String conversationId) async {
-  try {
-    await _getConversationsRef(userId)
-        .doc(conversationId)
-        .delete();
-  } catch (e) {
-    print('Error eliminando conversación: $e');
-  }
-}
-  Future<Map<String, dynamic>> getQuickStats(String userId) async {
-    try {
-      final context = await _analytics.getUserContext(userId);
-      return {
-        'totalHabits': context['totalHabits'] ?? 0,
-        'completionRate': context['weeklyCompletionRate'] ?? 0.0,
-        'bestHabits': context['bestHabits'] ?? [],
-        'strugglingHabits': context['strugglingHabits'] ?? [],
-        'preferredTime': context['patterns']?['preferredTime'] ?? 'No identificado',
-      };
-    } catch (e) {
-      print('Error obteniendo estadísticas rápidas: $e');
-      return {};
+      print('Error limpiando conversaciones: $e');
     }
   }
 }

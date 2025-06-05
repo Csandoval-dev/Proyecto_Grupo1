@@ -1,4 +1,5 @@
 import 'package:corelife/screens/habits_screen.dart';
+import 'package:corelife/screens/metrics_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../screens/login_screen.dart';
@@ -30,6 +31,10 @@ class AppRouter {
 GoRoute(
         path: '/habits', // Esta es la ruta que usarás para navegar
         builder: (context, state) => const HabitsScreen(), // Aquí instancias tu pantalla
+      ),
+      GoRoute(
+        path: '/metrics', // Esta es la ruta que usarás para navegar
+        builder: (context, state) => const MetricsScreen (), // Aquí instancias tu pantalla
       ),
     ],
     initialLocation: '/login',

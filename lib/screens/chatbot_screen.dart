@@ -23,13 +23,12 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   String _currentConversationId = '';
   bool _isLoading = false;
   String _userName = 'Usuario';
-  bool _showConversationList = false; // Cambiar a false por defecto
+  bool _showConversationList = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserName();
-    _loadConversations();
+    _initializeChat();
   }
 
   @override
@@ -39,118 +38,190 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     super.dispose();
   }
 
+  Future<void> _initializeChat() async {
+    setState(() => _isLoading = true);
+    try {
+      await _loadUserName();
+      await _startNewChat();
+      _loadConversations();
+    } catch (e) {
+      _showErrorMessage('Error al iniciar el chat. Por favor, intenta de nuevo.');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   Future<void> _loadUserName() async {
-    final name = await _chatbotService.getUserName(userId);
-    setState(() {
-      _userName = name;
-    });
+    try {
+      final name = await _chatbotService.getUserName(userId);
+      if (mounted) {
+        setState(() {
+          _userName = name;
+        });
+      }
+    } catch (e) {
+      print('Error cargando nombre de usuario: $e');
+    }
   }
 
   void _loadConversations() {
-    _chatbotService.getConversations(userId).listen((conversations) {
-      setState(() {
-        _conversations = conversations;
-        if (_currentConversationId.isEmpty && conversations.isNotEmpty) {
-          _currentConversationId = conversations.first.id;
+    _chatbotService.getConversations(userId).listen(
+      (conversations) {
+        if (mounted) {
+          setState(() {
+            final updatedConversations = conversations;
+            final currentExists = updatedConversations.any(
+              (conv) => conv.id == _currentConversationId,
+            );
+            
+            _conversations = updatedConversations;
+            
+            if (!currentExists && updatedConversations.isNotEmpty) {
+              _currentConversationId = updatedConversations.first.id;
+            }
+          });
         }
-      });
-    });
+      },
+      onError: (e) {
+        print('Error cargando conversaciones: $e');
+        _showErrorMessage('Error al cargar las conversaciones');
+      },
+    );
   }
 
-  void _startNewChat() async {
-    final newConversation = await _chatbotService.createNewConversation(userId);
-    setState(() {
-      _currentConversationId = newConversation.id;
-      if (!_conversations.any((conv) => conv.id == newConversation.id)) {
-        _conversations = [newConversation, ..._conversations];
+  Future<void> _startNewChat() async {
+    try {
+      final newConversation = await _chatbotService.createNewConversation(userId);
+      if (mounted) {
+        setState(() {
+          _currentConversationId = newConversation.id;
+          _conversations = [newConversation, ..._conversations];
+          if (MediaQuery.of(context).size.width < 768) {
+            _showConversationList = false;
+          }
+        });
+        _scrollToBottom();
       }
-      // En móvil, cerrar el sidebar después de crear nuevo chat
+    } catch (e) {
+      print('Error creando nuevo chat: $e');
+      _showErrorMessage('Error al crear nueva conversación');
+    }
+  }
+
+  void _selectConversation(String conversationId) {
+    setState(() {
+      _currentConversationId = conversationId;
       if (MediaQuery.of(context).size.width < 768) {
         _showConversationList = false;
       }
     });
+    _scrollToBottom();
   }
 
-  void _deleteConversation(String conversationId) async {
-    await _chatbotService.deleteConversation(userId, conversationId);
-    if (_currentConversationId == conversationId && _conversations.length > 1) {
-      setState(() {
-        _currentConversationId = _conversations
+  Future<void> _deleteConversation(String conversationId) async {
+    try {
+      await _chatbotService.deleteConversation(userId, conversationId);
+      
+      if (_currentConversationId == conversationId) {
+        final remainingConversations = _conversations
             .where((conv) => conv.id != conversationId)
-            .first
-            .id;
-      });
+            .toList();
+        
+        if (remainingConversations.isNotEmpty) {
+          setState(() {
+            _currentConversationId = remainingConversations.first.id;
+          });
+        } else {
+          await _startNewChat();
+        }
+      }
+    } catch (e) {
+      print('Error eliminando conversación: $e');
+      _showErrorMessage('Error al eliminar la conversación');
     }
   }
 
   Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty || _isLoading) return;
-
     final messageText = _messageController.text.trim();
+    if (messageText.isEmpty || _isLoading) return;
+
     _messageController.clear();
+    final previousMessages = List.of(_conversations
+        .firstWhere((conv) => conv.id == _currentConversationId)
+        .messages);
 
-    final userMessage = ChatbotMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      message: messageText,
-      isUser: true,
-      timestamp: DateTime.now(),
-    );
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    // Añadir mensaje del usuario inmediatamente
-    final currentConversation = _conversations.firstWhere(
-      (conv) => conv.id == _currentConversationId,
-      orElse: () => ChatConversation.create(),
-    );
-
-    final updatedConversation = currentConversation.addMessage(userMessage);
-
-    setState(() {
-      _conversations = _conversations.map((conv) {
-        return conv.id == _currentConversationId ? updatedConversation : conv;
-      }).toList();
-    });
-
-    _scrollToBottom();
+    setState(() => _isLoading = true);
 
     try {
-      await _chatbotService.sendMessage(
+      final botMessage = await _chatbotService.sendMessage(
         userId,
         messageText,
         conversationId: _currentConversationId,
       );
+      
+      if (!mounted) return;
+      
+      final currentConversation = _conversations
+          .firstWhere((conv) => conv.id == _currentConversationId,
+                     orElse: () => ChatConversation.create());
+      
+      if (currentConversation.id == 'new') {
+        await _startNewChat();
+      }
+      
+      _scrollToBottom();
     } catch (e) {
-      _showErrorMessage();
+      final conversationIndex = _conversations
+          .indexWhere((conv) => conv.id == _currentConversationId);
+      
+      if (conversationIndex != -1 && mounted) {
+        setState(() {
+          _conversations[conversationIndex] = _conversations[conversationIndex]
+              .copyWith(messages: previousMessages);
+        });
+      }
+      
+      _showErrorMessage('Error al enviar el mensaje');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   void _scrollToBottom() {
+    if (!_scrollController.hasClients) return;
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      try {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
+      } catch (e) {
+        print('Error en scroll: $e');
       }
     });
   }
 
-  void _showErrorMessage() {
+  void _showErrorMessage(String message) {
+    if (!mounted) return;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Error al enviar el mensaje'),
-        backgroundColor: Colors.red,
+        content: Text(message),
+        backgroundColor: Colors.red.shade600,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
+        ),
+        action: SnackBarAction(
+          label: 'OK',
+          textColor: Colors.white,
+          onPressed: () {},
         ),
       ),
     );
@@ -169,52 +240,25 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
-    final isTablet = screenWidth >= 768 && screenWidth < 1024;
     
-    final currentConversation = _conversations.firstWhere(
-      (conv) => conv.id == _currentConversationId,
-      orElse: () => ChatConversation.create(),
-    );
-
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F8),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        title: Row(
-          children: [
-            if (isMobile) ...[
-              IconButton(
-                icon: Icon(
-                  _showConversationList ? Icons.close : Icons.menu,
-                  color: Colors.black87,
-                ),
-                onPressed: _toggleConversationList,
-              ),
-              const SizedBox(width: 8),
-            ],
-            Icon(
-              Icons.smart_toy,
-              color: Theme.of(context).primaryColor,
-              size: 28,
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              'CoreLife Catalyst',
-              style: TextStyle(
-                color: Colors.black87,
-                fontWeight: FontWeight.w600,
-                fontSize: 20,
-              ),
-            ),
-          ],
-        ),
-        automaticallyImplyLeading: false,
-        actions: [
-          if (!isMobile)
+      appBar: _buildAppBar(theme, isMobile),
+      body: _buildBody(theme, isMobile),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(ThemeData theme, bool isMobile) {
+    return AppBar(
+      elevation: 0,
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      title: Row(
+        children: [
+          if (isMobile) ...[
             IconButton(
               icon: Icon(
                 _showConversationList ? Icons.close : Icons.menu,
@@ -222,147 +266,135 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
               ),
               onPressed: _toggleConversationList,
             ),
-          IconButton(
-            icon: const Icon(Icons.add, color: Colors.black87),
-            onPressed: _startNewChat,
+            const SizedBox(width: 8),
+          ],
+          Icon(
+            Icons.smart_toy,
+            color: theme.primaryColor,
+            size: 28,
           ),
           const SizedBox(width: 8),
-        ],
-      ),
-      body: Stack(
-        children: [
-          // Chat principal
-          Column(
-            children: [
-              Expanded(
-                child: currentConversation.messages.isEmpty
-                    ? _buildWelcomeMessage()
-                    : _buildChatMessages(currentConversation),
-              ),
-              _buildMessageInput(),
-            ],
+          const Text(
+            'CoreLife Assistant',
+            style: TextStyle(
+              color: Colors.black87,
+              fontWeight: FontWeight.w600,
+              fontSize: 20,
+            ),
           ),
-          
-          // Sidebar de conversaciones
-          if (_showConversationList)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Container(
-                width: isMobile ? screenWidth * 0.85 : 320,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(2, 0),
-                    ),
-                  ],
-                ),
-                child: ConversationList(
-                  conversations: _conversations,
-                  currentConversationId: _currentConversationId,
-                  onConversationSelected: (id) {
-                    setState(() {
-                      _currentConversationId = id;
-                      if (isMobile) {
-                        _showConversationList = false;
-                      }
-                    });
-                  },
-                  onNewChat: _startNewChat,
-                  onDeleteConversation: _deleteConversation,
-                ),
-              ),
-            ),
-          
-          // Overlay para cerrar sidebar en móvil
-          if (_showConversationList && isMobile)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () => setState(() => _showConversationList = false),
-                child: Container(
-                  color: Colors.black.withOpacity(0.3),
-                ),
-              ),
-            ),
         ],
       ),
-    );
-  }
-
-  Widget _buildWelcomeMessage() {
-    return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 600),
-        padding: const EdgeInsets.all(32),
-        margin: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
+      automaticallyImplyLeading: false,
+      actions: [
+        if (!isMobile)
+          IconButton(
+            icon: const Icon(
+              Icons.menu,
+              color: Colors.black87,
+            ),
+            onPressed: _toggleConversationList,
+          ),
+        IconButton(
+          icon: const Icon(
+            Icons.add,
+            color: Colors.black87,
+          ),
+          onPressed: _startNewChat,
+          tooltip: 'Nueva conversación',
+        ),
+        PopupMenuButton<String>(
+          icon: const Icon(
+            Icons.more_vert,
+            color: Colors.black87,
+          ),
+          onSelected: (value) {
+            if (value == 'clear_all') {
+              _showClearAllDialog();
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'clear_all',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_sweep, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Limpiar todo'),
+                ],
+              ),
             ),
           ],
         ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  Widget _buildBody(ThemeData theme, bool isMobile) {
+    final currentConversation = _conversations.firstWhere(
+      (conv) => conv.id == _currentConversationId,
+      orElse: () => ChatConversation.create(),
+    );
+
+    return Stack(
+      children: [
+        Column(
+          children: [
+            Expanded(
+              child: currentConversation.messages.isEmpty
+                  ? _buildEmptyState(theme)
+                  : _buildChatMessages(currentConversation, theme),
+            ),
+            _buildMessageInput(theme),
+          ],
+        ),
+        if (_showConversationList)
+          _buildConversationsSidebar(isMobile, theme),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(ThemeData theme) {
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 400),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                color: theme.primaryColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.smart_toy,
                 size: 48,
-                color: Theme.of(context).primaryColor,
+                color: theme.primaryColor,
               ),
             ),
             const SizedBox(height: 24),
             Text(
               '¡Hola, $_userName! 👋',
               style: const TextStyle(
-                fontSize: 28,
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: Colors.black87,
               ),
             ),
             const SizedBox(height: 12),
             const Text(
-              'Soy tu CoreLife Catalyst, tu coach personal de hábitos.',
+              'Iniciando nueva conversación...',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 16,
                 color: Colors.black54,
-                height: 1.4,
               ),
             ),
             const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0F9FF),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFFE0F2FE),
-                ),
-              ),
-              child: const Text(
-                '¿En qué puedo ayudarte hoy? 😊',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF0369A1),
-                ),
-              ),
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(theme.primaryColor),
             ),
           ],
         ),
@@ -370,42 +402,38 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     );
   }
 
-  Widget _buildChatMessages(ChatConversation conversation) {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 800),
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        itemCount: conversation.messages.length + (_isLoading ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (_isLoading && index == conversation.messages.length) {
-            // Mostrar indicador de carga como mensaje del bot
-            return ChatMessageWidget(
-              key: const ValueKey('loading'),
-              message: ChatbotMessage(
-                id: 'loading',
-                message: '',
-                isUser: false,
-                timestamp: DateTime.now(),
-              ),
-              isTyping: true,
-              onOptionSelected: _handleOptionSelected,
-            );
-          }
-          
-          final message = conversation.messages[index];
+  Widget _buildChatMessages(ChatConversation conversation, ThemeData theme) {
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      itemCount: conversation.messages.length + (_isLoading ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (_isLoading && index == conversation.messages.length) {
           return ChatMessageWidget(
-            key: ValueKey(message.id),
-            message: message,
-            isTyping: false,
+            key: const ValueKey('loading'),
+            message: ChatbotMessage(
+              id: 'loading',
+              message: '',
+              isUser: false,
+              timestamp: DateTime.now(),
+            ),
+            isTyping: true,
             onOptionSelected: _handleOptionSelected,
           );
-        },
-      ),
+        }
+        
+        final message = conversation.messages[index];
+        return ChatMessageWidget(
+          key: ValueKey(message.id),
+          message: message,
+          isTyping: false,
+          onOptionSelected: _handleOptionSelected,
+        );
+      },
     );
   }
 
-  Widget _buildMessageInput() {
+  Widget _buildMessageInput(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -419,67 +447,163 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         ],
       ),
       child: SafeArea(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 800),
-          child: Row(
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF7F7F8),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: _isLoading 
-                          ? Colors.grey.shade300 
-                          : Colors.transparent,
-                    ),
-                  ),
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: const InputDecoration(
-                      hintText: 'Escribe tu mensaje...',
-                      hintStyle: TextStyle(color: Colors.grey),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 16,
-                      ),
-                    ),
-                    enabled: !_isLoading,
-                    onSubmitted: (_) => _sendMessage(),
-                    textInputAction: TextInputAction.send,
-                    maxLines: 4,
-                    minLines: 1,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Container(
+        child: Row(
+          children: [
+            Expanded(
+              child: Container(
                 decoration: BoxDecoration(
-                  color: _isLoading 
-                      ? Colors.grey.shade400 
-                      : Theme.of(context).primaryColor,
-                  shape: BoxShape.circle,
+                  color: const Color(0xFFF7F7F8),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: _isLoading 
+                        ? Colors.grey.shade300 
+                        : Colors.transparent,
+                  ),
                 ),
-                child: IconButton(
-                  onPressed: _isLoading ? null : _sendMessage,
-                  icon: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.send_rounded),
-                  color: Colors.white,
-                  splashRadius: 24,
+                child: TextField(
+                  controller: _messageController,
+                  decoration: const InputDecoration(
+                    hintText: 'Escribe sobre tus hábitos...',
+                    hintStyle: TextStyle(color: Colors.grey),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                  ),
+                  enabled: !_isLoading,
+                  onSubmitted: (_) => _sendMessage(),
+                  textInputAction: TextInputAction.send,
+                  maxLines: 3,
+                  minLines: 1,
                 ),
               ),
-            ],
+            ),
+            const SizedBox(width: 12),
+            _buildSendButton(theme),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSendButton(ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _isLoading 
+            ? Colors.grey.shade400 
+            : theme.primaryColor,
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        onPressed: _isLoading ? null : _sendMessage,
+        icon: _isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.send_rounded),
+        color: Colors.white,
+        splashRadius: 24,
+      ),
+    );
+  }
+
+  Widget _buildConversationsSidebar(bool isMobile, ThemeData theme) {
+    return Stack(
+      children: [
+        if (isMobile)
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => setState(() => _showConversationList = false),
+              child: Container(color: Colors.black.withOpacity(0.3)),
+            ),
+          ),
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          child: Container(
+            width: isMobile ? MediaQuery.of(context).size.width * 0.85 : 320,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(2, 0),
+                ),
+              ],
+            ),
+            child: ConversationList(
+              conversations: _conversations,
+              currentConversationId: _currentConversationId,
+              onConversationSelected: _selectConversation,
+              onNewChat: _startNewChat,
+              onDeleteConversation: _deleteConversation,
+            ),
           ),
         ),
+      ],
+    );
+  }
+
+  void _showClearAllDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.orange.shade600,
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Limpiar conversaciones',
+              style: TextStyle(color: Colors.black87),
+            ),
+          ],
+        ),
+        content: const Text(
+          '¿Estás seguro de que quieres eliminar todas las conversaciones? '
+          'Esta acción no se puede deshacer.',
+          style: TextStyle(color: Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await _chatbotService.clearAllConversations(userId);
+                await _startNewChat();
+              } catch (e) {
+                _showErrorMessage('Error al limpiar las conversaciones');
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Eliminar todo'),
+          ),
+        ],
       ),
     );
   }

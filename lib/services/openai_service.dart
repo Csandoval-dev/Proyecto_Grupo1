@@ -45,55 +45,126 @@ class OpenAIService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return _formatCatalystResponse(data['choices'][0]['message']['content'].toString().trim());
+        return _formatCatalystResponse(
+          data['choices'][0]['message']['content'].toString().trim(),
+          userContext['currentHabit'] != null,
+        );
       } else {
         print('Error OpenAI: ${response.body}');
-        return _formatCatalystResponse('Lo siento, no pude procesar tu mensaje en este momento.');
+        throw Exception('Error en la respuesta de OpenAI: ${response.statusCode}');
       }
     } catch (e) {
       print('Error en OpenAI Service: $e');
-      return _formatCatalystResponse('Ocurrió un error. Por favor intenta de nuevo.');
+      return _formatCatalystResponse(
+        'Lo siento, hubo un error al procesar tu mensaje. ¿Podrías intentarlo de nuevo?',
+        false,
+      );
     }
   }
 
   String _buildContextualPrompt(String userMessage, Map<String, dynamic> context) {
-    final userName = context['usuario'] ?? context['userName'] ?? 'Usuario';
-    final habitsCount = context['totalHabits'] ?? 0;
-    final completionRate = context['weeklyCompletionRate'] ?? 0;
-    final strugglingHabits = context['strugglingHabits'] ?? [];
-    final bestHabits = context['bestHabits'] ?? [];
-    final patterns = context['patterns'] ?? {};
-    final bestTimes = context['bestTimes'] ?? {};
-
-    return '''
+    final userName = context['userName'] ?? 'Usuario';
+    final currentHabit = context['currentHabit'];
+    final habitMetrics = context['habitMetrics'];
+    final habits = context['habitsList'] as List<dynamic>? ?? [];
+    
+    String prompt = '''
 ANÁLISIS DEL USUARIO:
 👤 Nombre: $userName
-📊 Estado Actual:
-- Hábitos activos: $habitsCount
-- Tasa de cumplimiento: ${completionRate.toStringAsFixed(1)}%
-- Hábitos destacados: ${bestHabits.isEmpty ? 'Ninguno aún' : bestHabits.join(', ')}
-- Áreas de mejora: ${strugglingHabits.isEmpty ? 'Ninguna identificada' : strugglingHabits.join(', ')}
+📊 Estado General:
+- Hábitos activos: ${habits.length}
+''';
 
-PATRONES IDENTIFICADOS:
-- Tendencia: ${patterns['improving'] == true ? '📈 Mejorando' : patterns['declining'] == true ? '📉 Necesita atención' : '➡️ Estable'}
-- Mejor momento del día: ${patterns['preferredTime'] ?? 'No identificado'}
-- Horarios óptimos: ${bestTimes.isEmpty ? 'En análisis' : bestTimes.entries.map((e) => "${e.key}: ${e.value}").join(', ')}
+    // Agregar contexto específico del hábito si está seleccionado
+    if (currentHabit != null) {
+      prompt += '''
+🎯 HÁBITO EN FOCO:
+- Nombre: ${currentHabit['name']}
+- Descripción: ${currentHabit['description'] ?? 'Sin descripción'}
+- Categoría: ${currentHabit['category'] ?? 'General'}
+''';
 
-INTERACCIÓN ACTUAL: $userMessage
+      if (habitMetrics != null) {
+        final completionRate = habitMetrics['completionRate'] ?? 0;
+        final totalDone = habitMetrics['totalDone'] ?? 0;
+        final totalMissed = habitMetrics['totalMissed'] ?? 0;
+        final weeklyData = habitMetrics['weeklyData'] ?? 0;
+
+        prompt += '''
+📈 MÉTRICAS DEL HÁBITO:
+- Tasa de cumplimiento: $completionRate%
+- Completados: $totalDone
+- Perdidos: $totalMissed
+- Semanas registradas: $weeklyData
+
+${_getHabitAnalysis(completionRate, totalDone, totalMissed)}
+''';
+      }
+
+      // Agregar patrones identificados si existen
+      if (context['patterns'] != null) {
+        final patterns = context['patterns'] as Map<String, dynamic>;
+        prompt += '''
+🔍 PATRONES IDENTIFICADOS:
+- Tendencia: ${_getProgressTrend(patterns)}
+- Mejor horario: ${patterns['preferredTime'] ?? 'No identificado'}
+''';
+      }
+    } else if (habits.isNotEmpty) {
+      prompt += '''
+📋 HÁBITOS DISPONIBLES:
+${habits.asMap().entries.map((e) => "- ${e.key + 1}. ${e.value['name']}").join('\n')}
+
+💡 Tip: Puedes seleccionar un hábito por su número o nombre.
+''';
+    }
+
+    prompt += '''
+
+💬 MENSAJE ACTUAL: $userMessage
 
 INSTRUCCIONES DE RESPUESTA:
-1. Analiza el contexto completo del usuario
+1. ${currentHabit != null 
+    ? 'Enfócate en el hábito seleccionado y sus métricas'
+    : 'Ayuda al usuario a seleccionar o gestionar sus hábitos'}
 2. Genera una respuesta que:
-   - Sea personalizada usando los datos disponibles
+   - Sea personalizada y específica al contexto
+   - Use datos concretos cuando estén disponibles
    - Incluya 2-3 opciones de acción entre [corchetes]
-   - Sea motivadora y orientada a resultados
-   - Use emojis apropiadamente para mejorar la comunicación
+   - Use emojis apropiadamente
 ''';
+
+    return prompt;
+  }
+
+  String _getHabitAnalysis(int completionRate, int totalDone, int totalMissed) {
+    if (totalDone + totalMissed == 0) {
+      return '⚠️ No hay suficientes datos para análisis';
+    }
+
+    if (completionRate >= 80) {
+      return '🌟 EXCELENTE DESEMPEÑO: Mantén este nivel de compromiso.';
+    } else if (completionRate >= 60) {
+      return '👍 BUEN PROGRESO: Vas por buen camino, pero hay espacio para mejorar.';
+    } else if (completionRate >= 40) {
+      return '💪 ÁREA DE OPORTUNIDAD: Con pequeños ajustes puedes mejorar significativamente.';
+    } else {
+      return '❗ NECESITA ATENCIÓN: Identifiquemos juntos los obstáculos y creemos un plan.';
+    }
+  }
+
+  String _getProgressTrend(Map<String, dynamic> patterns) {
+    if (patterns['improving'] == true) {
+      return '📈 En mejora';
+    } else if (patterns['declining'] == true) {
+      return '📉 Necesita atención';
+    }
+    return '➡️ Estable';
   }
 
   String _getSystemPrompt() {
     return '''
-Eres CoreLife Catalyst, un coach de bienestar personal proactivo y experto en análisis de hábitos.
+Eres CoreLife Catalyst, un coach de bienestar personal experto en análisis de hábitos.
 
 PERSONALIDAD:
 - Proactivo y observador: Identificas patrones y ofreces sugerencias específicas
@@ -135,7 +206,7 @@ REGLAS DE INTERACCIÓN:
 ''';
   }
 
-  String _formatCatalystResponse(String response) {
+  String _formatCatalystResponse(String response, bool hasHabitContext) {
     if (response.contains('[') && response.contains(']')) {
       return response;
     }
@@ -147,24 +218,46 @@ REGLAS DE INTERACCIÓN:
     
     final isQuestion = response.contains('?');
     
-    if (isPositive) {
-      return '''
+    if (hasHabitContext) {
+      if (isPositive) {
+        return '''
 $response
 
-[✨ ¡Genial!] [📈 Ver progreso] [🎯 Siguiente meta]
+[✨ ¡Excelente!] [📊 Ver detalles] [🎯 Ajustar meta]
 ''';
-    } else if (isQuestion) {
-      return '''
+      } else if (isQuestion) {
+        return '''
 $response
 
-[👍 Sí, me interesa] [🤔 Necesito más info] [⏳ Otro momento]
+[👍 Sí, adelante] [💡 Más información] [🔄 Cambiar hábito]
 ''';
+      } else {
+        return '''
+$response
+
+[✅ Entendido] [📈 Ver progreso] [❓ Necesito ayuda]
+''';
+      }
     } else {
-      return '''
+      if (isPositive) {
+        return '''
 $response
 
-[✅ Entendido] [💡 ¿Cómo mejorar?] [📊 Ver detalles]
+[✨ ¡Genial!] [📋 Ver hábitos] [➕ Nuevo hábito]
 ''';
+      } else if (isQuestion) {
+        return '''
+$response
+
+[👍 Sí, me interesa] [🤔 Más detalles] [⏳ Después]
+''';
+      } else {
+        return '''
+$response
+
+[✅ Entendido] [💡 Sugerencias] [📊 Ver resumen]
+''';
+      }
     }
   }
 }
