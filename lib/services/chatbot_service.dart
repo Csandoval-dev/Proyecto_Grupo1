@@ -6,7 +6,7 @@ import 'openai_service.dart';
 class ChatbotService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final OpenAIService _openAI = OpenAIService();
-  
+
   CollectionReference<Map<String, dynamic>> _getConversationsRef(String userId) {
     return _firestore
         .collection('Usuarios')
@@ -15,30 +15,29 @@ class ChatbotService {
   }
 
   Future<String> getUserName(String userId) async {
-  try {
-    final userDoc = await _firestore
-        .collection('Usuarios')
-        .doc(userId)
-        .get();
+    try {
+      final userDoc = await _firestore
+          .collection('Usuarios')
+          .doc(userId)
+          .get();
 
-    if (userDoc.exists) {
-      final userData = userDoc.data()!;
-      
-      // Usar el campo 'usuario' que contiene el nombre completo
-      final nombreUsuario = userData['usuario'];
-      if (nombreUsuario != null && nombreUsuario.toString().trim().isNotEmpty) {
-        return nombreUsuario.toString();
+      if (userDoc.exists) {
+        final userData = userDoc.data()!;
+
+        // Usa una lógica de respaldo para encontrar el nombre del usuario
+        // Primero busca 'nombre', luego 'usuario', y si no, usa la parte del email
+        return userData['nombre'] ??
+               userData['usuario'] ??
+               (userData['email'] as String?)?.split('@')[0] ??
+               'Usuario';
       }
-      
-      // Si por alguna razón no hay usuario, usar el valor por defecto
-      return 'Jose';
+      return 'Usuario';
+    } catch (e) {
+      print('Error obteniendo nombre de usuario: $e');
+      return 'Usuario';
     }
-    return 'Jose';
-  } catch (e) {
-    print('Error obteniendo nombre de usuario: $e');
-    return 'Csandoval-dev';
   }
-}
+
   Future<List<Map<String, dynamic>>> getUserHabits(String userId) async {
     try {
       final habitsSnapshot = await _firestore
@@ -49,7 +48,7 @@ class ChatbotService {
           .get();
 
       List<Map<String, dynamic>> habits = [];
-      
+
       for (var doc in habitsSnapshot.docs) {
         final data = doc.data();
         habits.add({
@@ -72,7 +71,7 @@ class ChatbotService {
   bool _isHabitActive(Map<String, dynamic> habitData) {
     final endDate = habitData['endDate'];
     if (endDate == null) return true;
-    
+
     final endDateTime = (endDate as Timestamp).toDate();
     return DateTime.now().isBefore(endDateTime);
   }
@@ -94,11 +93,11 @@ class ChatbotService {
 
       int totalDone = 0;
       int totalMissed = 0;
-      
+
       for (var doc in metricsSnapshot.docs) {
         final data = doc.data();
        totalDone += (data['done'] as int?) ?? 0;
-      totalMissed += (data['missed'] as int?) ?? 0;
+       totalMissed += (data['missed'] as int?) ?? 0;
 
       }
 
@@ -128,14 +127,14 @@ class ChatbotService {
     try {
       final habits = await getUserHabits(userId);
       final userName = await getUserName(userId);
-      
+
       String welcomeMessage = "¡Hola $userName! 👋\n\n";
-      
+
       if (habits.isEmpty) {
         welcomeMessage += "Soy tu asistente personal. Para empezar a trabajar juntos, " +
-                         "necesitarás agregar algunos hábitos que quieras desarrollar. " +
-                         "Una vez que lo hagas, podré ayudarte a darles seguimiento y " +
-                         "brindarte consejos personalizados.";
+                          "necesitarás agregar algunos hábitos que quieras desarrollar. " +
+                          "Una vez que lo hagas, podré ayudarte a darles seguimiento y " +
+                          "brindarte consejos personalizados.";
       } else {
         welcomeMessage += "Estos son tus hábitos activos:\n\n";
         for (int i = 0; i < habits.length; i++) {
@@ -147,7 +146,7 @@ class ChatbotService {
           welcomeMessage += "\n";
         }
         welcomeMessage += "\n¿Sobre cuál hábito te gustaría conversar? " +
-                         "Puedes escribir el nombre o número del hábito.";
+                          "Puedes escribir el nombre o número del hábito.";
       }
       final newConversation = ChatConversation(
         id: 'conv_${DateTime.now().millisecondsSinceEpoch}',
@@ -202,27 +201,27 @@ class ChatbotService {
       }
 
       final context = await _prepareHabitContext(userId, message, conversation);
-      
+
       final botResponse = await _openAI.sendMessage(
         userMessage: message,
         userContext: context,
       );
-      
+
       final botMessage = ChatbotMessage(
         id: '${DateTime.now().millisecondsSinceEpoch}_bot',
         message: botResponse,
         isUser: false,
         timestamp: DateTime.now(),
       );
-      
+
       conversation = conversation
           .addMessage(userMessage)
           .addMessage(botMessage);
-      
+
       await _getConversationsRef(userId)
           .doc(conversation.id)
           .set(conversation.toMap());
-      
+
       return botMessage;
     } catch (e) {
       print('Error en ChatbotService: $e');
@@ -236,18 +235,18 @@ class ChatbotService {
   }
 
   Future<Map<String, dynamic>> _prepareHabitContext(
-    String userId, 
-    String userMessage, 
+    String userId,
+    String userMessage,
     ChatConversation conversation
   ) async {
     final habits = await getUserHabits(userId);
     final userName = await getUserName(userId);
-    
+
     String? selectedHabitId;
     Map<String, dynamic>? selectedHabitData;
-    
+
     final userMessageLower = userMessage.toLowerCase();
-    
+
     // Primero intentar encontrar por número
     final numberMatch = RegExp(r'^(\d+)').firstMatch(userMessageLower);
     if (numberMatch != null) {
@@ -257,7 +256,7 @@ class ChatbotService {
         selectedHabitData = habits[number];
       }
     }
-    
+
     // Si no se encontró por número, buscar por nombre
     if (selectedHabitId == null) {
       for (var habit in habits) {
