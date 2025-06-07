@@ -1,6 +1,5 @@
 import 'package:corelife/screens/habits_screen.dart';
 import 'package:corelife/screens/metrics_screen.dart';
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';

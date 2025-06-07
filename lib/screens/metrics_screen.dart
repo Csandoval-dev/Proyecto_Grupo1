@@ -1,6 +1,8 @@
+import 'package:corelife/widgets/drawer.dart';
 import 'package:flutter/material.dart';
 //import 'package:cloud_firestore/cloud_firestore.dart';  Codigo para conexion de Firebase Firestore
 import 'package:fl_chart/fl_chart.dart';
+
 
 class MetricsScreen extends StatelessWidget {
   const MetricsScreen({super.key});
@@ -88,6 +90,8 @@ class MetricsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Métricas')),
+      // AQUÍ AGREGAMOS EL DRAWER
+      drawer: const MenuDrawer(),
       body: FutureBuilder<Map<String, dynamic>>(
         future: fetchMockMetricsData(),
         //future: fetchMetricsData(),
