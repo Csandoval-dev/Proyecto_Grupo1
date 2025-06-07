@@ -47,7 +47,7 @@ class OpenAIService {
         final data = jsonDecode(response.body);
         return _formatCatalystResponse(
           data['choices'][0]['message']['content'].toString().trim(),
-          userContext['currentHabit'] != null,
+          userContext,
         );
       } else {
         print('Error OpenAI: ${response.body}');
@@ -57,7 +57,7 @@ class OpenAIService {
       print('Error en OpenAI Service: $e');
       return _formatCatalystResponse(
         'Lo siento, hubo un error al procesar tu mensaje. ¿Podrías intentarlo de nuevo?',
-        false,
+        {'currentHabit': null},
       );
     }
   }
@@ -66,198 +66,201 @@ class OpenAIService {
     final userName = context['userName'] ?? 'Usuario';
     final currentHabit = context['currentHabit'];
     final habitMetrics = context['habitMetrics'];
+    final previousContext = context['previousContext'] as Map<String, dynamic>?;
     final habits = context['habitsList'] as List<dynamic>? ?? [];
     
-    String prompt = '''
-ANÁLISIS DEL USUARIO:
+    String prompt = '''\nANÁLISIS DEL USUARIO Y CONTEXTO:
 👤 Nombre: $userName
-📊 Estado General:
-- Hábitos activos: ${habits.length}
-''';
+💭 Último tema: ${previousContext?['lastTopic'] ?? 'Ninguno'}
+🔄 Flujo de conversación: ${previousContext?['conversationFlow'] ?? 'Inicial'}
+📊 Estado General: ${habits.length} hábitos activos\n''';
+
+    // Agregar contexto de conversación previa
+    if (previousContext != null && previousContext['lastSuggestion'] != null) {
+      prompt += '''\n📝 Última sugerencia: ${previousContext['lastSuggestion']}\n''';
+    }
+
+    // Agregar selecciones previas del usuario
+    final selectedOptions = previousContext?['selectedOptions'] as List<String>? ?? [];
+    if (selectedOptions.isNotEmpty) {
+      prompt += '\n🔍 Últimas selecciones del usuario: ${selectedOptions.join(", ")}\n';
+    }
 
     // Agregar contexto específico del hábito si está seleccionado
     if (currentHabit != null) {
-      prompt += '''
-🎯 HÁBITO EN FOCO:
+      prompt += '''\n🎯 HÁBITO EN FOCO:
 - Nombre: ${currentHabit['name']}
 - Descripción: ${currentHabit['description'] ?? 'Sin descripción'}
 - Categoría: ${currentHabit['category'] ?? 'General'}
 ''';
 
-      if (habitMetrics != null) {
+      if (habitMetrics != null && habitMetrics['hasData'] == true) {
         final completionRate = habitMetrics['completionRate'] ?? 0;
         final totalDone = habitMetrics['totalDone'] ?? 0;
         final totalMissed = habitMetrics['totalMissed'] ?? 0;
-        final weeklyData = habitMetrics['weeklyData'] ?? 0;
+        final weeklyData = habitMetrics['weeklyData'] as List? ?? [];
 
-        prompt += '''
-📈 MÉTRICAS DEL HÁBITO:
+        prompt += '''\n📈 MÉTRICAS DEL HÁBITO:
 - Tasa de cumplimiento: $completionRate%
 - Completados: $totalDone
 - Perdidos: $totalMissed
-- Semanas registradas: $weeklyData
-
-${_getHabitAnalysis(completionRate, totalDone, totalMissed)}
+- Días registrados: ${weeklyData.length}
+- Tendencia: ${_analyzeTrend(weeklyData)}
+''';
+      } else {
+        prompt += '''\n📊 ESTADO DE MÉTRICAS:
+- Sin datos registrados aún
+- Proporcionar consejos generales y motivación inicial
+- Enfatizar la importancia del seguimiento
 ''';
       }
-
-      // Agregar patrones identificados si existen
-      if (context['patterns'] != null) {
-        final patterns = context['patterns'] as Map<String, dynamic>;
-        prompt += '''
-🔍 PATRONES IDENTIFICADOS:
-- Tendencia: ${_getProgressTrend(patterns)}
-- Mejor horario: ${patterns['preferredTime'] ?? 'No identificado'}
-''';
-      }
-    } else if (habits.isNotEmpty) {
-      prompt += '''
-📋 HÁBITOS DISPONIBLES:
-${habits.asMap().entries.map((e) => "- ${e.key + 1}. ${e.value['name']}").join('\n')}
-
-💡 Tip: Puedes seleccionar un hábito por su número o nombre.
-''';
     }
 
-    prompt += '''
+    // Agregar histórico de conversación relevante
+    final conversationHistory = context['conversationHistory'] as List? ?? [];
+    if (conversationHistory.isNotEmpty) {
+      prompt += '\n💬 CONTEXTO DE CONVERSACIÓN RECIENTE:\n';
+      for (var msg in conversationHistory.take(3)) {
+        prompt += '${msg['isUser'] ? '👤' : '🤖'} ${msg['message']}\n';
+      }
+    }
 
-💬 MENSAJE ACTUAL: $userMessage
+    prompt += '''\n\n💭 MENSAJE ACTUAL DEL USUARIO:
+$userMessage
 
-INSTRUCCIONES DE RESPUESTA:
-1. ${currentHabit != null 
-    ? 'Enfócate en el hábito seleccionado y sus métricas'
-    : 'Ayuda al usuario a seleccionar o gestionar sus hábitos'}
-2. Genera una respuesta que:
-   - Sea personalizada y específica al contexto
-   - Use datos concretos cuando estén disponibles
-   - Incluya 2-3 opciones de acción entre [corchetes]
-   - Use emojis apropiadamente
+🎯 OBJETIVOS DE RESPUESTA:
+1. ${currentHabit != null ? 'Mantener enfoque en el hábito actual' : 'Ayudar a seleccionar un hábito'}
+2. ${habitMetrics != null && habitMetrics['hasData'] == true ? 
+     'Usar métricas para personalizar consejos' : 
+     'Proporcionar orientación general y motivación'}
+3. Ofrecer 2-3 opciones claras de acción
+4. Mantener un tono motivador y empático
 ''';
 
     return prompt;
   }
 
-  String _getHabitAnalysis(int completionRate, int totalDone, int totalMissed) {
-    if (totalDone + totalMissed == 0) {
-      return '⚠️ No hay suficientes datos para análisis';
-    }
+  String _analyzeTrend(List<dynamic> weeklyData) {
+    if (weeklyData.isEmpty) return 'Sin datos suficientes';
+    
+    try {
+      var completionRates = weeklyData.map((day) {
+        final done = (day['done'] ?? 0) as int;
+        final missed = (day['missed'] ?? 0) as int;
+        final total = done + missed;
+        return total > 0 ? (done / total) * 100 : 0.0;
+      }).toList();
 
-    if (completionRate >= 80) {
-      return '🌟 EXCELENTE DESEMPEÑO: Mantén este nivel de compromiso.';
-    } else if (completionRate >= 60) {
-      return '👍 BUEN PROGRESO: Vas por buen camino, pero hay espacio para mejorar.';
-    } else if (completionRate >= 40) {
-      return '💪 ÁREA DE OPORTUNIDAD: Con pequeños ajustes puedes mejorar significativamente.';
-    } else {
-      return '❗ NECESITA ATENCIÓN: Identifiquemos juntos los obstáculos y creemos un plan.';
+      if (completionRates.length >= 2) {
+        final recent = completionRates.take(2).toList();
+        if (recent[0] > recent[1] + 10) {
+          return '📈 Mejorando';
+        } else if (recent[0] < recent[1] - 10) {
+          return '📉 Necesita atención';
+        }
+      }
+      
+      return '➡️ Estable';
+    } catch (e) {
+      return 'No determinada';
     }
   }
 
-  String _getProgressTrend(Map<String, dynamic> patterns) {
-    if (patterns['improving'] == true) {
-      return '📈 En mejora';
-    } else if (patterns['declining'] == true) {
-      return '📉 Necesita atención';
+  String _formatCatalystResponse(String response, Map<String, dynamic> context) {
+    if (response.contains('[') && response.contains(']')) {
+      return response;
     }
-    return '➡️ Estable';
+
+    final currentHabit = context['currentHabit'];
+    final habitMetrics = context['habitMetrics'];
+    final hasMetrics = habitMetrics != null && habitMetrics['hasData'] == true;
+    
+    final isQuestion = response.contains('?');
+    final isPositive = response.contains('¡') || 
+                      response.toLowerCase().contains('excelente') || 
+                      response.toLowerCase().contains('bien') ||
+                      response.toLowerCase().contains('felicidades');
+
+    String formattedResponse = response;
+    
+    // Agregar opciones según el contexto
+    if (currentHabit != null) {
+      if (hasMetrics) {
+        if (isPositive) {
+          formattedResponse += '''\n\n[📊 Ver detalles completos] [🎯 Ajustar meta] [💪 Siguiente paso]''';
+        } else if (isQuestion) {
+          formattedResponse += '''\n\n[✅ Sí, continuar] [❌ No, cambiar] [💡 Más información]''';
+        } else {
+          formattedResponse += '''\n\n[📈 Ver progreso] [🔄 Cambiar enfoque] [❓ Necesito ayuda]''';
+        }
+      } else {
+        if (isPositive) {
+          formattedResponse += '''\n\n[✅ Empezar registro] [📝 Ver consejos] [🎯 Establecer meta]''';
+        } else if (isQuestion) {
+          formattedResponse += '''\n\n[👍 Me interesa] [🤔 Más detalles] [🔄 Otro hábito]''';
+        } else {
+          formattedResponse += '''\n\n[📋 Crear plan] [💡 Ver tips] [❓ Preguntar más]''';
+        }
+      }
+    } else {
+      if (isPositive) {
+        formattedResponse += '''\n\n[✨ ¡Genial!] [📋 Ver hábitos] [➕ Nuevo hábito]''';
+      } else if (isQuestion) {
+        formattedResponse += '''\n\n[👍 Sí, adelante] [🤔 Más información] [⏳ Después]''';
+      } else {
+        formattedResponse += '''\n\n[✅ Entendido] [💡 Sugerencias] [❓ Ayuda]''';
+      }
+    }
+
+    return formattedResponse;
   }
 
   String _getSystemPrompt() {
-    return '''
-Eres CoreLife Catalyst, un coach de bienestar personal experto en análisis de hábitos.
+    return '''\nEres CoreLife Catalyst, un coach de hábitos y bienestar personal experto en análisis conductual.
 
 PERSONALIDAD:
 - Proactivo y observador: Identificas patrones y ofreces sugerencias específicas
 - Empático pero directo: Entiendes las dificultades pero motivas a la acción
-- Orientado a datos: Usas métricas específicas para fundamentar recomendaciones
+- Orientado a datos: Usas métricas cuando están disponibles para personalizar consejos
 - Motivador y positivo: Celebras logros y animas durante los desafíos
 
 CAPACIDADES:
 1. Análisis de Patrones:
    - Evalúas tendencias en el cumplimiento de hábitos
-   - Identificas horarios óptimos y patrones de éxito
+   - Identificas momentos óptimos y patrones de éxito
    - Detectas áreas de mejora y oportunidades
 
 2. Coaching Personalizado:
-   - Sugieres ajustes basados en datos reales
+   - Sugieres ajustes basados en datos reales cuando existen
    - Propones modificaciones graduales y alcanzables
    - Ofreces estrategias para superar obstáculos
+   
+3. Gestión Sin Métricas:
+   - Proporcionas consejos generales basados en mejores prácticas
+   - Motivas el inicio y mantenimiento del seguimiento
+   - Enfatizas la importancia del registro consistente
 
-3. Motivación Contextual:
-   - Celebras logros con datos específicos
+4. Motivación Contextual:
+   - Celebras logros específicos cuando hay datos
    - Proporcionas recordatorios estratégicos
    - Anticipas desafíos y ofreces soluciones preventivas
 
 REGLAS DE INTERACCIÓN:
-1. FORMATO DE RESPUESTA:
-   - Mensaje principal: Corto y directo (2-3 oraciones máximo)
-   - Opciones: 2-3 alternativas entre [corchetes]
-   - Emojis: Usar cuando sea apropiado para mejorar comprensión
+1. Formato de Respuesta:
+   - Mensaje principal: Claro y conciso (2-3 oraciones)
+   - Datos específicos: Incluir cuando estén disponibles
+   - Opciones: Siempre 2-3 alternativas entre [corchetes]
+   - Emojis: Usar apropiadamente para mejorar comprensión
 
-2. CONTENIDO:
-   - Siempre incluir al menos un dato específico del usuario
-   - Ofrecer opciones concretas y accionables
-   - Mantener un tono positivo incluso al señalar áreas de mejora
+2. Manejo de Datos:
+   - Con métricas: Usar datos específicos para personalizar
+   - Sin métricas: Enfocarse en consejos generales y motivación
+   - Siempre: Mantener relevancia al contexto actual
 
-3. ENFOQUE:
-   - Priorizar acciones pequeñas y alcanzables
-   - Celebrar cualquier progreso, sin importar lo pequeño
-   - Ofrecer alternativas cuando se detecten dificultades
+3. Continuidad:
+   - Mantener coherencia con mensajes previos
+   - Seguir el hilo de la conversación
+   - Adaptar sugerencias según respuestas anteriores
 ''';
-  }
-
-  String _formatCatalystResponse(String response, bool hasHabitContext) {
-    if (response.contains('[') && response.contains(']')) {
-      return response;
-    }
-    
-    final isPositive = response.contains('¡') || 
-                      response.contains('excelente') || 
-                      response.contains('bien') ||
-                      response.contains('felicidades');
-    
-    final isQuestion = response.contains('?');
-    
-    if (hasHabitContext) {
-      if (isPositive) {
-        return '''
-$response
-
-[✨ ¡Excelente!] [📊 Ver detalles] [🎯 Ajustar meta]
-''';
-      } else if (isQuestion) {
-        return '''
-$response
-
-[👍 Sí, adelante] [💡 Más información] [🔄 Cambiar hábito]
-''';
-      } else {
-        return '''
-$response
-
-[✅ Entendido] [📈 Ver progreso] [❓ Necesito ayuda]
-''';
-      }
-    } else {
-      if (isPositive) {
-        return '''
-$response
-
-[✨ ¡Genial!] [📋 Ver hábitos] [➕ Nuevo hábito]
-''';
-      } else if (isQuestion) {
-        return '''
-$response
-
-[👍 Sí, me interesa] [🤔 Más detalles] [⏳ Después]
-''';
-      } else {
-        return '''
-$response
-
-[✅ Entendido] [💡 Sugerencias] [📊 Ver resumen]
-''';
-      }
-    }
   }
 }
