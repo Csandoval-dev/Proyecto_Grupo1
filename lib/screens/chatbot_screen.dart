@@ -275,7 +275,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
           ),
           const SizedBox(width: 8),
           const Text(
-            'CoreLife Assistant',
+            'Nero Core',
             style: TextStyle(
               color: Colors.black87,
               fontWeight: FontWeight.w600,
