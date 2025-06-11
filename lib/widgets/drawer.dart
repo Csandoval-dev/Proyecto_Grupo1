@@ -27,7 +27,7 @@ class MenuDrawer extends StatelessWidget {
                   buildListTile(context, FontAwesomeIcons.listCheck, 'Hábitos', () => GoRouter.of(context).go('/habits')),
                   buildListTile(context, FontAwesomeIcons.chartLine, 'Métricas', () => GoRouter.of(context).go('/metrics')),
                   buildListTile(context, FontAwesomeIcons.heartPulse, 'CoreLife', () => GoRouter.of(context).go('/chatbot')),
-                  buildListTile(context, Icons.people_alt_rounded, 'About Us', () => GoRouter.of(context).go('/about')),
+                  buildListTile(context, Icons.people_alt_rounded, 'Suscription', () => GoRouter.of(context).go('/paypal')),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
                     child: Divider(color: Color(0xFFE6BFD9), thickness: 1.5),
