@@ -23,7 +23,7 @@ class MenuDrawer extends StatelessWidget {
                 physics: const BouncingScrollPhysics(), // Efecto de rebote al scrollear
                 children: <Widget>[
                   const SizedBox(height: 10),
-                  buildListTile(context, Icons.home_rounded, 'Inicio', () => GoRouter.of(context).go('/')),
+                  buildListTile(context, Icons.home_rounded, 'Inicio', () => GoRouter.of(context).go('/home')),
                   buildListTile(context, FontAwesomeIcons.listCheck, 'Hábitos', () => GoRouter.of(context).go('/habits')),
                   buildListTile(context, FontAwesomeIcons.chartLine, 'Métricas', () => GoRouter.of(context).go('/metrics')),
                   buildListTile(context, FontAwesomeIcons.heartPulse, 'CoreLife', () => GoRouter.of(context).go('/chatbot')),

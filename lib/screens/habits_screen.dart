@@ -120,6 +120,74 @@ class _HabitsScreenState extends State<HabitsScreen> {
     }
   }
 
+  // ✅ NUEVO: Iniciar un hábito
+  Future<void> _startHabit(Habit habit) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('🚀 Iniciar Hábito'),
+        content: Text('¿Estás listo para comenzar con "${habit.name}"?\n\nUna vez iniciado, aparecerá en tu pantalla de inicio para hacer seguimiento diario.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4CAF50),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('¡Iniciar!'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _habitService.startHabit(habit.id!);
+        _showSnackBar('🚀 ¡Hábito iniciado correctamente!');
+      } catch (e) {
+        _showSnackBar('❌ Error al iniciar hábito: $e');
+      }
+    }
+  }
+
+  // ✅ NUEVO: Pausar un hábito
+  Future<void> _pauseHabit(Habit habit) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('⏸️ Pausar Hábito'),
+        content: Text('¿Quieres pausar "${habit.name}"?\n\nSe quitará de tu pantalla de inicio pero mantendrá todo su progreso.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF9800),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Pausar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _habitService.pauseHabit(habit.id!);
+        _showSnackBar('⏸️ Hábito pausado correctamente');
+      } catch (e) {
+        _showSnackBar('❌ Error al pausar hábito: $e');
+      }
+    }
+  }
+
   Future<void> _deleteHabit(Habit habit) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -408,33 +476,73 @@ class _HabitsScreenState extends State<HabitsScreen> {
             end: Alignment.bottomRight,
           ),
         ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(16),
-          leading: Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.check, color: Colors.white),
-          ),
-          title: Text(
-            habit.name,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          subtitle: Column(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 4),
-              Text(
-                habit.description,
-                style: TextStyle(color: Colors.grey[600]),
+              // Header de la tarjeta
+              Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.check, color: Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          habit.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          habit.description,
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  // ✅ NUEVO: Estado del hábito
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: habit.isStarted ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: habit.isStarted ? Colors.green : Colors.orange,
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      habit.isStarted ? 'Activo' : 'Creado',
+                      style: TextStyle(
+                        color: habit.isStarted ? Colors.green : Colors.orange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
+              
+              const SizedBox(height: 12),
+              
+              // Información del hábito
               Row(
                 children: [
                   Icon(Icons.category, size: 14, color: Colors.grey[600]),
@@ -458,39 +566,87 @@ class _HabitsScreenState extends State<HabitsScreen> {
                   ),
                 ],
               ),
-            ],
-          ),
-          trailing: PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'edit':
-                  _showHabitForm(habitToEdit: habit);
-                  break;
-                case 'delete':
-                  _deleteHabit(habit);
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'edit',
-                child: Row(
-                  children: [
-                    Icon(Icons.edit, color: Color(0xFF7E57C2)),
-                    SizedBox(width: 8),
-                    Text('Editar'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('Eliminar'),
-                  ],
-                ),
+              
+              const SizedBox(height: 16),
+              
+              // ✅ NUEVO: Botones de acción
+              Row(
+                children: [
+                  // Botón Iniciar/Pausar
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        if (habit.isStarted) {
+                          _pauseHabit(habit);
+                        } else {
+                          _startHabit(habit);
+                        }
+                      },
+                      icon: Icon(
+                        habit.isStarted ? Icons.pause : Icons.play_arrow,
+                        size: 18,
+                      ),
+                      label: Text(
+                        habit.isStarted ? 'Pausar' : 'Iniciar',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: habit.isStarted ? const Color(0xFFFF9800) : const Color(0xFF4CAF50),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(width: 8),
+                  
+                  // Botón de menú
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'edit':
+                          _showHabitForm(habitToEdit: habit);
+                          break;
+                        case 'delete':
+                          _deleteHabit(habit);
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, color: Color(0xFF7E57C2)),
+                            SizedBox(width: 8),
+                            Text('Editar'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Eliminar'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.more_vert, size: 18),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
