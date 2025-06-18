@@ -173,14 +173,15 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              "Bienvenido",
-              style: GoogleFonts.poppins(
-                fontSize: isSmallScreen ? 22 : 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+           Text(
+  "Bienvenido",
+  textAlign: TextAlign.center,
+  style: GoogleFonts.poppins(
+    fontSize: isSmallScreen ? 22 : 24,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  ),
+),
             SizedBox(height: isSmallScreen ? 16 : 20),
             _buildTextField(
               controller: _emailController,

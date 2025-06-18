@@ -136,7 +136,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget>
       height: 32,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+          colors: [Color(0xFF7C3AED), Color(0xFF7C3AED)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

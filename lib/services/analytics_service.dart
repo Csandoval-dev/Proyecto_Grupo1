@@ -44,19 +44,14 @@ class AnalyticsService {
     }
   }
 
-  Future<QuerySnapshot> _getMetricsWithTimeWindow(String userId) async {
-    // Obtener métricas de las últimas 4 semanas para análisis de tendencias
-    final fourWeeksAgo = DateTime.now().subtract(const Duration(days: 28));
-    
+ Future<QuerySnapshot> _getMetricsWithTimeWindow(String userId) async {
     return await _firestore
         .collection('Usuarios')
         .doc(userId)
         .collection('metrics')
-        .where('startDate', isGreaterThan: fourWeeksAgo)
-        .orderBy('startDate', descending: true)
+        .orderBy('startDate', descending: true)  // Solo ordenar por startDate
         .get();
-  }
-
+}
   Future<Map<String, dynamic>> _analyzeUserData(
     List<QueryDocumentSnapshot> habits,
     List<QueryDocumentSnapshot> metrics,
