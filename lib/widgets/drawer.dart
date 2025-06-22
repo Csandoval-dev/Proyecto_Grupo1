@@ -7,27 +7,33 @@ class MenuDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Obtenemos el tamaño de la pantalla para manejar mejor el layout
+    final Size screenSize = MediaQuery.of(context).size;
+    final double statusBarHeight = MediaQuery.of(context).padding.top;
+    
     return Drawer(
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-        ),
+      backgroundColor: const Color(0xFFFFF6FA), // Fondo pastel más claro y suave
+      child: SafeArea( // Agregamos SafeArea para evitar overflow con la barra de estado
         child: Column(
           children: [
-            _buildProfileSection(),
+            _buildDrawerHeader(context, statusBarHeight),
             Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 24),
-                    _buildMainMenuSection(context),
-                    const SizedBox(height: 24),
-                    _buildSecondaryMenuSection(context),
-                    const SizedBox(height: 24),
-                    _buildSettingsSection(context),
-                  ],
-                ),
+              child: ListView(
+                padding: EdgeInsets.zero,
+                physics: const BouncingScrollPhysics(), // Efecto de rebote al scrollear
+                children: <Widget>[
+                  const SizedBox(height: 10),
+                  buildListTile(context, Icons.home_rounded, 'Inicio', () => GoRouter.of(context).go('/home')),
+                  buildListTile(context, FontAwesomeIcons.listCheck, 'Hábitos', () => GoRouter.of(context).go('/habits')),
+                  buildListTile(context, FontAwesomeIcons.chartLine, 'Métricas', () => GoRouter.of(context).go('/metrics')),
+                  buildListTile(context, FontAwesomeIcons.heartPulse, 'NeuroCore', () => GoRouter.of(context).go('/chatbot')),
+                  buildListTile(context, Icons.people_alt_rounded, 'Suscripcion', () => GoRouter.of(context).go('/paypal')),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                    child: Divider(color: Color(0xFFE6BFD9), thickness: 1.5),
+                  ),
+                  buildListTile(context, Icons.settings_rounded, 'Configuración', () => GoRouter.of(context).go('/settings')),
+                ],
               ),
             ),
           ],
@@ -35,238 +41,86 @@ class MenuDrawer extends StatelessWidget {
       ),
     );
   }
-
-  Widget _buildProfileSection() {
+  
+  Widget _buildDrawerHeader(BuildContext context, double statusBarHeight) {
     return Container(
-      padding: const EdgeInsets.only(top: 60, bottom: 24, left: 24, right: 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            offset: const Offset(0, 4),
-            blurRadius: 12,
-          ),
-        ],
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20.0),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFC8DD), // Rosa pastel más vibrante
+            Color(0xFFBFB3E0), // Lila pastel más atractivo
+          ],
+        ),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 80,
-            height: 80,
+            width: 85,
+            height: 85,
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
               shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFF6200EA),
-                width: 2,
-              ),
+              border: Border.all(color: Colors.white, width: 3),
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: const Icon(
-              Icons.person_outline_rounded,
-              color: Color(0xFF6200EA),
-              size: 40,
+              Icons.person,
+              size: 50,
+              color: Color(0xFFDEA4CE), // Color icono rosa más vibrante
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           const Text(
-            'Csandoval-dev',
+            "Usuario",
             style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1A1A1A),
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Desarrollador',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-              letterSpacing: -0.3,
+              color: Color(0xFF6D3F5B), // Color más profundo para mejor contraste
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildMainMenuSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            'PRINCIPAL',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
-              letterSpacing: 1.2,
-            ),
+  
+  Widget buildListTile(BuildContext context, IconData icon, String title, Function()? onTap) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 2),
+        leading: Icon(
+          icon, 
+          color: const Color(0xFFDEA4CE), // Color de icono más vibrante
+          size: 24,
+        ),
+        title: Text(
+          title, 
+          style: const TextStyle(
+            color: Color(0xFF6D3F5B), // Color de texto más oscuro para mejor legibilidad
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 12),
-        _buildMenuItem(
-          context: context,
-          icon: Icons.home_rounded,
-          title: 'Inicio',
-          route: '/home',
-          isFirst: true,
+        onTap: onTap,
+        hoverColor: const Color(0xFFFFC8DD).withOpacity(0.3),
+        // Forma más redondeada para cada item
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
         ),
-        _buildMenuItem(
-          context: context,
-          icon: FontAwesomeIcons.listCheck,
-          title: 'Hábitos',
-          route: '/habits',
-        ),
-        _buildMenuItem(
-          context: context,
-          icon: FontAwesomeIcons.chartLine,
-          title: 'Métricas',
-          route: '/metrics',
-          isLast: true,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSecondaryMenuSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            'SERVICIOS',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
-              letterSpacing: 1.2,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildMenuItem(
-          context: context,
-          icon: FontAwesomeIcons.heartPulse,
-          title: 'CoreLife',
-          route: '/chatbot',
-          isFirst: true,
-        ),
-        _buildMenuItem(
-          context: context,
-          icon: FontAwesomeIcons.crown,
-          title: 'Premium',
-          route: '/paypal',
-          isLast: true,
-          isPremium: true,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSettingsSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            'PREFERENCIAS',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
-              letterSpacing: 1.2,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildMenuItem(
-          context: context,
-          icon: Icons.settings_rounded,
-          title: 'Configuración',
-          route: '/settings',
-          isFirst: true,
-          isLast: true,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMenuItem({
-    required BuildContext context,
-    required IconData icon,
-    required String title,
-    required String route,
-    bool isFirst = false,
-    bool isLast = false,
-    bool isPremium = false,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => GoRouter.of(context).go(route),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          decoration: BoxDecoration(
-            border: Border(
-              top: isFirst ? BorderSide(color: Colors.grey.withOpacity(0.1)) : BorderSide.none,
-              bottom: BorderSide(color: Colors.grey.withOpacity(0.1)),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isPremium 
-                      ? const Color(0xFFFFC107).withOpacity(0.1)
-                      : const Color(0xFF6200EA).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  icon,
-                  size: 20,
-                  color: isPremium ? const Color(0xFFFFA000) : const Color(0xFF6200EA),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[800],
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              if (isPremium)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFC107).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'PREMIUM',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFFFA000),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
+        // Agregamos un color para el efecto tap
+        tileColor: Colors.transparent,
+        selectedTileColor: const Color(0xFFFFC8DD).withOpacity(0.15),
       ),
     );
   }

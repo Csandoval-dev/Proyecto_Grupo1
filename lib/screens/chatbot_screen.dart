@@ -1,3 +1,4 @@
+import 'package:corelife/widgets/drawer.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/chatbot_message.dart';
@@ -14,6 +15,7 @@ class ChatbotScreen extends StatefulWidget {
 }
 
 class _ChatbotScreenState extends State<ChatbotScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ChatbotService _chatbotService = ChatbotService();
@@ -196,11 +198,13 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
       } catch (e) {
         print('Error en scroll: $e');
       }
@@ -245,122 +249,162 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     final isMobile = screenWidth < 768;
     
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: const Color(0xFFF8FAFC),
-      body: Column(
-        children: [
-          _buildAppBar(theme, isMobile),
-          Expanded(
-            child: Stack(
-              children: [
-                Column(
-                  children: [
-                    Expanded(
-                      child: _buildMainContent(theme),
-                    ),
-                  ],
-                ),
-                if (_showConversationList)
-                  _buildConversationsSidebar(isMobile, theme),
-              ],
+      drawer: const MenuDrawer(),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildAppBar(theme, isMobile),
+            Expanded(
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                      Expanded(
+                        child: _buildMainContent(theme),
+                      ),
+                    ],
+                  ),
+                  if (_showConversationList)
+                    _buildConversationsSidebar(isMobile, theme),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(ThemeData theme, bool isMobile) {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(64),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 1),
+  Widget _buildAppBar(ThemeData theme, bool isMobile) {
+    return Container(
+      height: 64.0, // Altura fija para evitar problemas de overflow
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            // Botón del drawer
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(
+                  Icons.menu,
+                  color: Color(0xFF1F2937),
+                  size: 24,
+                ),
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                tooltip: 'Menú',
+              ),
             ),
-          ],
-        ),
-        child: SafeArea(
-          child: Container(
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
+            const SizedBox(width: 12),
+            // Logo y título
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.smart_toy,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Neuro Core',
+                style: TextStyle(
+                  color: Color(0xFF1F2937),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 18,
+                  letterSpacing: 0.2,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            // Botones de acción
+            Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                if (isMobile)
-                  IconButton(
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
                     icon: Icon(
-                      _showConversationList ? Icons.close : Icons.menu,
+                      _showConversationList ? Icons.close : Icons.chat_bubble_outline,
                       color: const Color(0xFF1F2937),
+                      size: 22,
                     ),
                     onPressed: _toggleConversationList,
+                    tooltip: 'Conversaciones',
                   ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                ),
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(
+                      Icons.add,
+                      color: Color(0xFF1F2937),
+                      size: 22,
                     ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.smart_toy,
-                    color: Colors.white,
-                    size: 24,
+                    onPressed: _startNewChat,
+                    tooltip: 'Nueva conversación',
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Neuro Core',
-                  style: TextStyle(
-                    color: Color(0xFF1F2937),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 20,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                const Spacer(),
-                if (!isMobile)
-                  IconButton(
-                    icon: const Icon(Icons.menu),
-                    onPressed: _toggleConversationList,
-                    color: const Color(0xFF1F2937),
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: _startNewChat,
-                  color: const Color(0xFF1F2937),
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(
-                    Icons.more_vert,
-                    color: Color(0xFF1F2937),
-                  ),
-                  onSelected: (value) {
-                    if (value == 'clear_all') {
-                      _showClearAllDialog();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'clear_all',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_sweep, color: Colors.red.shade600),
-                          const SizedBox(width: 12),
-                          const Text('Limpiar todo'),
-                        ],
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(
+                      Icons.more_vert,
+                      color: Color(0xFF1F2937),
+                      size: 22,
+                    ),
+                    onSelected: (value) {
+                      if (value == 'clear_all') {
+                        _showClearAllDialog();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'clear_all',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.delete_sweep, color: Colors.red.shade600, size: 20),
+                            const SizedBox(width: 12),
+                            const Text('Limpiar todo'),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -385,65 +429,77 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   }
 
   Widget _buildEmptyState(ThemeData theme) {
-    return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight,
+            ),
+            child: Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 400),
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF8B5CF6).withOpacity(0.25),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.smart_toy,
+                        size: 48,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Text(
+                      '¡Hola, $_userName! 👋',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1F2937),
+                        letterSpacing: 0.2,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Iniciando nueva conversación...',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFF6B7280),
+                        height: 1.5,
+                      ),
+                    ),
+                    if (_isLoading) ...[
+                      const SizedBox(height: 32),
+                      CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(theme.primaryColor),
+                      ),
+                    ],
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF8B5CF6).withOpacity(0.25),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.smart_toy,
-                size: 48,
-                color: Colors.white,
               ),
             ),
-            const SizedBox(height: 32),
-            Text(
-              '¡Hola, $_userName! 👋',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1F2937),
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Iniciando nueva conversación...',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Color(0xFF6B7280),
-                height: 1.5,
-              ),
-            ),
-            if (_isLoading) ...[
-              const SizedBox(height: 32),
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(theme.primaryColor),
-              ),
-            ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -490,86 +546,94 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
           ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),  // Color gris claro para el fondo
-                borderRadius: BorderRadius.circular(24),  // Bordes más ovalados
-              ),
-              child: TextField(
-                controller: _messageController,
-                decoration: InputDecoration(
-                  hintText: 'Escribe un mensaje...',
-                  hintStyle: TextStyle(
-                    color: Colors.grey[600],
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Container(
+                constraints: const BoxConstraints(
+                  maxHeight: 120, // Limitar altura máxima
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: TextField(
+                  controller: _messageController,
+                  decoration: InputDecoration(
+                    hintText: 'Escribe un mensaje...',
+                    hintStyle: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 16,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFFF3F4F6),
+                    isDense: true,
+                  ),
+                  textInputAction: TextInputAction.send,
+                  keyboardType: TextInputType.multiline,
+                  maxLines: 4,
+                  minLines: 1,
+                  style: const TextStyle(
                     fontSize: 16,
+                    color: Color(0xFF1F2937),
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFFF3F4F6),
-                  isDense: true,
-                ),
-                textInputAction: TextInputAction.send,
-                keyboardType: TextInputType.multiline,
-                maxLines: 4,
-                minLines: 1,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF1F2937),
+                  onSubmitted: (_) => _sendMessage(),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 6),
-          Container(
-            width: 45,
-            height: 45,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF8B5CF6),
-                  const Color(0xFF7C3AED),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+            const SizedBox(width: 8),
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF8B5CF6),
+                    Color(0xFF7C3AED),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
               ),
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(23),
-                onTap: _isLoading ? null : _sendMessage,
-                child: Center(
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(22),
+                  onTap: _isLoading ? null : _sendMessage,
+                  child: Center(
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.send_rounded,
+                            color: Colors.white,
+                            size: 18,
                           ),
-                        )
-                      : const Icon(
-                          Icons.send_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -584,41 +648,54 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
               color: Colors.black.withOpacity(0.4),
             ),
           ),
-          Container(
-            width: MediaQuery.of(context).size.width * 0.85,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.only(
-                topRight: Radius.circular(24),
-                bottomRight: Radius.circular(24),
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.85,
+              constraints: BoxConstraints(
+                maxWidth: 320, // Limitar ancho máximo
               ),
-            ),
-            child: ConversationList(
-              conversations: _conversations,
-              currentConversationId: _currentConversationId,
-              onConversationSelected: _selectConversation,
-              onNewChat: _startNewChat,
-              onDeleteConversation: _deleteConversation,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  bottomLeft: Radius.circular(24),
+                ),
+              ),
+              child: ConversationList(
+                conversations: _conversations,
+                currentConversationId: _currentConversationId,
+                onConversationSelected: _selectConversation,
+                onNewChat: _startNewChat,
+                onDeleteConversation: _deleteConversation,
+              ),
             ),
           ),
         ],
       );
     } else {
-      return Container(
-        width: 320,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topRight: Radius.circular(24),
-            bottomRight: Radius.circular(24),
+      return Positioned(
+        right: 0,
+        top: 0,
+        bottom: 0,
+        child: Container(
+          width: 320,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              bottomLeft: Radius.circular(24),
+            ),
           ),
-        ),
-        child: ConversationList(
-          conversations: _conversations,
-          currentConversationId: _currentConversationId,
-          onConversationSelected: _selectConversation,
-          onNewChat: _startNewChat,
-          onDeleteConversation: _deleteConversation,
+          child: ConversationList(
+            conversations: _conversations,
+            currentConversationId: _currentConversationId,
+            onConversationSelected: _selectConversation,
+            onNewChat: _startNewChat,
+            onDeleteConversation: _deleteConversation,
+          ),
         ),
       );
     }
@@ -647,12 +724,14 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
               ),
             ),
             const SizedBox(width: 16),
-            const Text(
-              'Limpiar conversaciones',
-              style: TextStyle(
-                color: Color(0xFF1F2937),
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
+            const Expanded(
+              child: Text(
+                'Limpiar conversaciones',
+                style: TextStyle(
+                  color: Color(0xFF1F2937),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],

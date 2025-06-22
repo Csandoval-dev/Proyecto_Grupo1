@@ -39,8 +39,6 @@ class ChatbotService {
 
   Future<List<Map<String, dynamic>>> getUserHabits(String userId) async {
     try {
-      print('🔍 Buscando hábitos para usuario: $userId');
-      
       final habitsSnapshot = await _firestore
           .collection('Usuarios')
           .doc(userId)
@@ -48,14 +46,10 @@ class ChatbotService {
           .orderBy('createdAt', descending: false)
           .get();
 
-      print('📊 Total de hábitos encontrados: ${habitsSnapshot.docs.length}');
-
       List<Map<String, dynamic>> habits = [];
 
       for (var doc in habitsSnapshot.docs) {
         final data = doc.data();
-        print('🎯 Procesando hábito: ${data['name']} (ID: ${doc.id})');
-        
         habits.add({
           'id': doc.id,
           'name': data['name'] ?? 'Hábito sin nombre',
@@ -69,8 +63,6 @@ class ChatbotService {
       }
 
       final activeHabits = habits.where((habit) => habit['isActive'] == true).toList();
-      print('✅ Hábitos activos encontrados: ${activeHabits.length}');
-
       return activeHabits;
     } catch (e) {
       print('❌ Error obteniendo hábitos: $e');
@@ -81,16 +73,12 @@ class ChatbotService {
   bool _isHabitActive(Map<String, dynamic> habitData) {
     final endDate = habitData['endDate'];
     if (endDate == null) return true;
-
     final endDateTime = (endDate as Timestamp).toDate();
     return DateTime.now().isBefore(endDateTime);
   }
 
   Future<Map<String, dynamic>> getHabitMetrics(String userId, String habitId) async {
     try {
-      print('🔍 Buscando métricas para hábito: $habitId');
-      
-      // Simplificar la consulta para evitar el error de índice
       final metricsSnapshot = await _firestore
           .collection('Usuarios')
           .doc(userId)
@@ -98,56 +86,39 @@ class ChatbotService {
           .where('habitId', isEqualTo: habitId)
           .get();
 
-      print('📊 Métricas encontradas: ${metricsSnapshot.docs.length}');
-
       int totalDone = 0;
       int totalMissed = 0;
       List<Map<String, dynamic>> dailyData = [];
 
-      // Ordenar los documentos manualmente
       final sortedDocs = metricsSnapshot.docs
         ..sort((a, b) {
           final aDate = (a.data()['startDate'] as Timestamp).toDate();
           final bDate = (b.data()['startDate'] as Timestamp).toDate();
-          return bDate.compareTo(aDate); // Ordenar descendente
+          return bDate.compareTo(aDate);
         });
 
-      // Tomar solo los últimos 7 documentos
       final recentDocs = sortedDocs.take(7);
 
       for (var doc in recentDocs) {
         final data = doc.data();
         final date = (data['startDate'] as Timestamp).toDate();
-        
-        print('📝 Procesando métrica: ${doc.id}');
-        print('   startDate: $date');
-        print('   countDone: ${data['countDone']}');
-        print('   countMissed: ${data['countMissed']}');
-        
         final done = (data['countDone'] as int?) ?? 0;
         final missed = (data['countMissed'] as int?) ?? 0;
-        
         totalDone += done;
         totalMissed += missed;
-        
-        dailyData.add({
-          'date': date.toIso8601String(),
-          'done': done,
-          'missed': missed,
-          'notes': data['notes'] ?? '',
-          'dayOfWeek': date.weekday, // 1 = Monday, 7 = Sunday
-        });
+       dailyData.add({
+  'date': "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}",
+  'done': done,
+  'missed': missed,
+  'notes': data['notes'] ?? '',
+  'dayOfWeek': date.weekday,
+});
       }
 
       final total = totalDone + totalMissed;
       final completionRate = total > 0 ? (totalDone / total * 100).round() : 0;
 
-      print('📊 Resumen de métricas:');
-      print('   Total completados: $totalDone');
-      print('   Total perdidos: $totalMissed');
-      print('   Tasa de completado: $completionRate%');
-
-      // Analizar patrones
+      // No recomendaciones predefinidas, solo métricas y patrones reales
       final patterns = _analyzePatterns(dailyData);
 
       return {
@@ -176,20 +147,17 @@ class ChatbotService {
   Map<String, dynamic> _analyzePatterns(List<Map<String, dynamic>> dailyData) {
     if (dailyData.isEmpty) return _getEmptyPatterns();
 
-    // Analizar días de la semana
     Map<int, int> successByDay = {};
     Map<int, int> totalByDay = {};
-    
+
     for (var day in dailyData) {
       final dayOfWeek = DateTime.parse(day['date']).weekday;
       final done = day['done'] as int;
       final total = done + (day['missed'] as int);
-      
       successByDay[dayOfWeek] = (successByDay[dayOfWeek] ?? 0) + done;
       totalByDay[dayOfWeek] = (totalByDay[dayOfWeek] ?? 0) + total;
     }
 
-    // Encontrar mejor y peor día
     int bestDay = 1;
     int worstDay = 1;
     double bestRate = 0;
@@ -198,7 +166,6 @@ class ChatbotService {
     successByDay.forEach((day, success) {
       final total = totalByDay[day] ?? 1;
       final rate = success / total;
-      
       if (rate > bestRate) {
         bestRate = rate;
         bestDay = day;
@@ -209,7 +176,6 @@ class ChatbotService {
       }
     });
 
-    // Calcular rachas
     int currentStreak = 0;
     int bestStreak = 0;
     int tempStreak = 0;
@@ -233,12 +199,8 @@ class ChatbotService {
       'worstDayRate': (worstRate * 100).round(),
       'currentStreak': currentStreak,
       'bestStreak': bestStreak,
-      'recommendations': _generateRecommendations(
-        bestDay, 
-        worstDay,
-        currentStreak,
-        bestStreak
-      ),
+      // Recomendaciones removidas: solo datos reales
+      'recommendations': [],
     };
   }
 
@@ -255,44 +217,6 @@ class ChatbotService {
     }
   }
 
-  List<String> _generateRecommendations(
-    int bestDay, 
-    int worstDay,
-    int currentStreak,
-    int bestStreak
-  ) {
-    List<String> recommendations = [];
-
-    // Recomendaciones basadas en días
-    if (worstDay == 6 || worstDay == 7) {
-      recommendations.add(
-        "Los fines de semana son tu mayor desafío. Considera establecer una "
-        "rutina especial para estos días."
-      );
-    }
-
-    // Recomendaciones basadas en rachas
-    if (currentStreak > 0) {
-      recommendations.add(
-        "¡Vas por buen camino! Llevas una racha de $currentStreak días. "
-        "¿Te animas a superar tu mejor racha de $bestStreak días?"
-      );
-    } else {
-      recommendations.add(
-        "Empecemos una nueva racha hoy. Tu mejor racha fue de $bestStreak días. "
-        "¡Vamos a superarla!"
-      );
-    }
-
-    // Recomendación general
-    recommendations.add(
-      "Tu mejor día es ${_getDayName(bestDay)}. ¿Qué haces diferente ese día? "
-      "Intenta aplicar esas estrategias los ${_getDayName(worstDay)}s."
-    );
-
-    return recommendations;
-  }
-
   Map<String, dynamic> _getEmptyPatterns() {
     return {
       'bestDay': 'Sin datos',
@@ -301,24 +225,52 @@ class ChatbotService {
       'worstDayRate': 0,
       'currentStreak': 0,
       'bestStreak': 0,
-      'recommendations': [
-        "Comienza registrando tu progreso diariamente para obtener recomendaciones personalizadas."
-      ],
+      'recommendations': [],
     };
   }
-    Future<ChatConversation> createNewConversation(String userId) async {
+
+  Future<void> setSelectedHabitForConversation(String userId, String conversationId, String habitId) async {
+    try {
+      await _getConversationsRef(userId)
+          .doc(conversationId)
+          .update({'selectedHabitId': habitId, 'lastUpdated': DateTime.now()});
+    } catch (e) {
+      print('Error actualizando selectedHabitId: $e');
+    }
+  }
+
+  Future<String?> getSelectedHabitId(String userId, ChatConversation conversation, List<Map<String, dynamic>> habits) async {
+    final doc = await _getConversationsRef(userId).doc(conversation.id).get();
+    if (doc.exists && doc.data()!.containsKey('selectedHabitId')) {
+      final id = doc.data()!['selectedHabitId'];
+      if (id != null && id.toString().isNotEmpty) return id.toString();
+    }
+    final recentMessages = conversation.messages.reversed.take(10).toList();
+    for (var msg in recentMessages) {
+      if (msg.isUser) {
+        final numberMatch = RegExp(r'^(\d+)').firstMatch(msg.message);
+        if (numberMatch != null) {
+          final number = int.parse(numberMatch.group(1)!)-1;
+          if (number >= 0 && number < habits.length) return habits[number]['id'];
+        }
+        try {
+          final habit = habits.firstWhere((h) => msg.message.toLowerCase().contains(h['name'].toString().toLowerCase()));
+          return habit['id'];
+        } catch (_) {}
+      }
+    }
+    return null;
+  }
+
+  Future<ChatConversation> createNewConversation(String userId) async {
     try {
       final habits = await getUserHabits(userId);
       final userName = await getUserName(userId);
-      final userContext = await _analytics.getUserContext(userId);
 
       String welcomeMessage = "¡Hola $userName! 👋\n\n";
 
       if (habits.isEmpty) {
-        welcomeMessage += "Soy tu asistente personal de hábitos. Para empezar "
-                       "necesitarás agregar algunos hábitos que quieras desarrollar. "
-                       "Una vez que lo hagas, podré ayudarte a darles seguimiento y "
-                       "brindarte consejos personalizados basados en tus datos.";
+        welcomeMessage += "Soy tu asistente personal de hábitos. Para empezar necesitas agregar algunos hábitos que quieras desarrollar. Una vez que lo hagas, podré ayudarte a darles seguimiento y brindarte consejos personalizados basados en tus datos.";
       } else {
         welcomeMessage += "Estos son tus hábitos activos:\n\n";
         for (int i = 0; i < habits.length; i++) {
@@ -329,8 +281,7 @@ class ChatbotService {
           }
           welcomeMessage += "\n";
         }
-        welcomeMessage += "\n¿Sobre cuál hábito te gustaría conversar? "
-                       "Puedes seleccionar por número o nombre.";
+        welcomeMessage += "\n¿Sobre cuál hábito te gustaría conversar? Puedes seleccionar por número o nombre.";
       }
 
       final newConversation = ChatConversation(
@@ -371,7 +322,6 @@ class ChatbotService {
       } else {
         conversation = await createNewConversation(userId);
       }
-
       final userMessage = ChatbotMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         message: message,
@@ -385,7 +335,42 @@ class ChatbotService {
         );
       }
 
+      // Solo mostrar el resumen general si el usuario lo pide explícitamente
+      bool userWantsResumen = message.toLowerCase().contains('ver resumen') ||
+                              message.toLowerCase().contains('ver hábitos');
+
+      if (userWantsResumen) {
+        final habits = await getUserHabits(userId);
+        String resumen = "Estos son tus hábitos activos:\n\n";
+        for (int i = 0; i < habits.length; i++) {
+          final habit = habits[i];
+          resumen += "${i + 1}. ${habit['name']}";
+          if (habit['description']?.isNotEmpty ?? false) {
+            resumen += " - ${habit['description']}";
+          }
+          resumen += "\n";
+        }
+        resumen += "\n¿Sobre cuál hábito te gustaría conversar? Puedes seleccionar por número o nombre.";
+        final botMessage = ChatbotMessage(
+          id: '${DateTime.now().millisecondsSinceEpoch}_bot',
+          message: resumen,
+          isUser: false,
+          timestamp: DateTime.now(),
+        );
+        conversation = conversation
+            .addMessage(userMessage)
+            .addMessage(botMessage);
+        await _getConversationsRef(userId)
+            .doc(conversation.id)
+            .set(conversation.toMap());
+        return botMessage;
+      }
+
       final context = await _prepareHabitContext(userId, message, conversation);
+
+      if (context['focusedHabitId'] != null && conversationId != null) {
+        await setSelectedHabitForConversation(userId, conversationId, context['focusedHabitId']);
+      }
 
       final botResponse = await _openAI.sendMessage(
         userMessage: message,
@@ -427,16 +412,11 @@ class ChatbotService {
     final habits = await getUserHabits(userId);
     final userName = await getUserName(userId);
 
-    String? selectedHabitId = await _getSelectedHabitFromConversation(
-      conversation,
-      habits
-    );
+    String? selectedHabitId = await getSelectedHabitId(userId, conversation, habits);
 
-    if (selectedHabitId == null) {
-      final habitMatch = _findHabitInMessage(userMessage, habits);
-      if (habitMatch != null) {
-        selectedHabitId = habitMatch['id'];
-      }
+    final habitMatch = _findHabitInMessage(userMessage, habits);
+    if (habitMatch != null && habitMatch['id'] != selectedHabitId) {
+      selectedHabitId = habitMatch['id'];
     }
 
     Map<String, dynamic>? selectedHabitData;
@@ -458,7 +438,7 @@ class ChatbotService {
       'habitsList': habits,
       'currentHabit': selectedHabitData,
       'conversationHistory': conversation.messages
-          .take(10)
+          .take(15)
           .map((msg) => {
             'isUser': msg.isUser,
             'message': msg.message,
@@ -466,6 +446,7 @@ class ChatbotService {
           })
           .toList(),
       'previousContext': conversationContext,
+      'lastUserMessage': userMessage,
     };
 
     if (selectedHabitId != null) {
@@ -476,32 +457,12 @@ class ChatbotService {
 
     return context;
   }
-    Future<String?> _getSelectedHabitFromConversation(
-    ChatConversation conversation,
-    List<Map<String, dynamic>> habits
-  ) async {
-    final recentMessages = conversation.messages.reversed.take(5).toList();
-    
-    for (var msg in recentMessages) {
-      if (!msg.isUser) {
-        for (var habit in habits) {
-          if (msg.message.toLowerCase().contains(
-            'hábito "${habit['name'].toLowerCase()}"'
-          )) {
-            return habit['id'];
-          }
-        }
-      }
-    }
-    return null;
-  }
 
   Map<String, dynamic>? _findHabitInMessage(
     String message,
     List<Map<String, dynamic>> habits
   ) {
     final messageLower = message.toLowerCase();
-    
     final numberMatch = RegExp(r'^(\d+)').firstMatch(messageLower);
     if (numberMatch != null) {
       final number = int.parse(numberMatch.group(1)!) - 1;
@@ -509,7 +470,6 @@ class ChatbotService {
         return habits[number];
       }
     }
-
     try {
       return habits.firstWhere(
         (habit) => messageLower.contains(
@@ -524,7 +484,7 @@ class ChatbotService {
   Map<String, dynamic> _extractConversationContext(ChatConversation conversation) {
     final lastBotMessages = conversation.messages
         .where((msg) => !msg.isUser)
-        .take(3)
+        .take(5)
         .toList();
 
     return {
@@ -537,7 +497,6 @@ class ChatbotService {
 
   String? _identifyLastTopic(List<ChatbotMessage> messages) {
     if (messages.isEmpty) return null;
-    
     final lastMessage = messages.first.message;
     if (lastMessage.contains('hábito')) {
       final habitMatch = RegExp(r'hábito de ([\w\s]+)').firstMatch(lastMessage);
@@ -548,13 +507,11 @@ class ChatbotService {
 
   String? _findLastSuggestion(List<ChatbotMessage> messages) {
     if (messages.isEmpty) return null;
-
     for (var msg in messages) {
       final suggestions = RegExp(r'\[(.*?)\]')
           .allMatches(msg.message)
           .map((m) => m.group(1))
           .toList();
-      
       if (suggestions.isNotEmpty) {
         return suggestions.join(', ');
       }
@@ -564,18 +521,14 @@ class ChatbotService {
 
   String _determineConversationFlow(List<ChatbotMessage> messages) {
     if (messages.length <= 1) return 'inicial';
-    
     final recentMessages = messages.reversed.take(3).toList();
     ChatbotMessage? lastUserMessage;
-    
     try {
       lastUserMessage = recentMessages.firstWhere((msg) => msg.isUser);
     } catch (e) {
       return 'inicial';
     }
-
     final message = lastUserMessage.message.toLowerCase();
-    
     if (message.contains('ayuda') || message.contains('problema')) {
       return 'solución_problema';
     } else if (message.contains('cómo') || message.contains('qué')) {
@@ -583,14 +536,12 @@ class ChatbotService {
     } else if (message.contains('gracias') || message.contains('entiendo')) {
       return 'cierre';
     }
-
     return 'seguimiento';
   }
 
   List<String> _extractSelectedOptions(List<ChatbotMessage> messages) {
     final selectedOptions = <String>[];
-    final recentMessages = messages.reversed.take(5).toList();
-
+    final recentMessages = messages.reversed.take(10).toList();
     for (var msg in recentMessages) {
       if (msg.isUser) {
         final userChoice = msg.message.replaceAll(RegExp(r'[\[\]]'), '').trim();
@@ -599,7 +550,6 @@ class ChatbotService {
         }
       }
     }
-
     return selectedOptions;
   }
 
@@ -622,7 +572,8 @@ class ChatbotService {
       return await createNewConversation(userId);
     }
   }
-    Stream<List<ChatConversation>> getConversations(String userId) {
+
+  Stream<List<ChatConversation>> getConversations(String userId) {
     return _getConversationsRef(userId)
         .orderBy('lastUpdated', descending: true)
         .limit(10)

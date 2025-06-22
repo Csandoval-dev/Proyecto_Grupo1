@@ -39,7 +39,7 @@ class OpenAIService {
               'content': prompt,
             }
           ],
-          'max_tokens': 300, // Reducido para respuestas más concisas
+          'max_tokens': 350,
           'temperature': 0.7,
         }),
       );
@@ -49,6 +49,7 @@ class OpenAIService {
         return _formatCatalystResponse(
           data['choices'][0]['message']['content'].toString().trim(),
           userContext,
+          userMessage,
         );
       } else {
         print('Error OpenAI: ${response.body}');
@@ -56,7 +57,7 @@ class OpenAIService {
       }
     } catch (e) {
       print('Error en OpenAI Service: $e');
-      return 'Lo siento, hubo un error al procesar tu mensaje. ¿Podrías intentarlo de nuevo? No te desanimes, cada obstáculo es una oportunidad para crecer 💪\n\n[🔄] Reintentar\n[❓] Ayuda\n[💬] Contacto';
+      return 'Lo siento, hubo un error al procesar tu mensaje. ¿Podrías intentarlo de nuevo?';
     }
   }
 
@@ -71,11 +72,19 @@ class OpenAIService {
     final previousContext = context['previousContext'] as Map<String, dynamic>?;
     final habits = context['habitsList'] as List<dynamic>? ?? [];
     
+    // MEJORADO: Mejor detección de conversación continua
+    final messageCount = previousContext?['messageCount'] ?? 0;
+    final isFirstInteraction = messageCount == 0;
+    final requestedDetails = userMessage.toLowerCase().contains('📊') || 
+                           userMessage.toLowerCase().contains('ver detalles') ||
+                           userMessage.toLowerCase().contains('detalles');
+    
     String prompt = '''ANÁLISIS DEL USUARIO Y CONTEXTO:
 👤 Usuario: $userName
 📅 Fecha: $formattedDateTime
 💭 Último tema: ${previousContext?['lastTopic'] ?? 'Ninguno'}
 📊 Estado: ${habits.length} hábitos activos
+🔄 Interacción: ${isFirstInteraction ? 'Primera' : 'Conversación continua (#$messageCount)'}
 
 ''';
 
@@ -85,18 +94,24 @@ class OpenAIService {
     }
 
     if (currentHabit != null) {
-      prompt += '''🎯 HÁBITO ACTUAL:
-Nombre: ${currentHabit['name']}
+      prompt += '''🎯 HÁBITO ACTUAL: ${currentHabit['name']}
 Categoría: ${currentHabit['category'] ?? 'General'}
 ''';
 
       if (habitMetrics != null && habitMetrics['hasData'] == true) {
         final patterns = habitMetrics['patterns'] as Map<String, dynamic>;
         final weeklyData = habitMetrics['weeklyData'] as List;
-        
-        prompt += '''
+
+        // CORREGIDO: Cálculo simple de días pendientes como en el código que funciona
+        final completedDays = _calculateWeeklyCompletedDays(weeklyData);
+        final pendingDays = 7 - completedDays;
+
+        // Solo mostrar métricas detalladas si es primera interacción o pidió detalles
+        if (isFirstInteraction || requestedDetails) {
+          prompt += '''
 📈 MÉTRICAS CLAVE:
-• Completados esta semana: ${habitMetrics['totalDone']}/${weeklyData.length}
+• Completados esta semana: $completedDays/7 días
+• Días pendientes: $pendingDays
 • Tasa de éxito: ${habitMetrics['completionRate']}%
 • Racha actual: ${patterns['currentStreak']} días
 • Tendencia: ${_analyzeTrend(weeklyData)}
@@ -104,50 +119,160 @@ Categoría: ${currentHabit['category'] ?? 'General'}
 🎯 PATRONES:
 • Mejor día: ${patterns['bestDay']} (${patterns['bestDayRate']}%)
 • Día desafiante: ${patterns['worstDay']} (${patterns['worstDayRate']}%)
+• Mejor racha: ${patterns['bestStreak']} días
+''';
+        }
+
+        prompt += '''
+DÍAS PENDIENTES ESTA SEMANA: $pendingDays
+DÍAS COMPLETADOS: $completedDays
+
+CONTEXTO PARA CONSEJOS:
+- Hábito: ${currentHabit['name']}
+- Días completados: $completedDays/7
+- Días pendientes: $pendingDays
+- Fortaleza: ${patterns['bestDay']}
+- Área de mejora: ${patterns['worstDay']}
+''';
+      } else {
+        prompt += '''
+📊 ESTADO: Sin métricas aún
+🎯 HÁBITO ACTUAL: ${currentHabit['name']}
+
+CONTEXTO PARA CONSEJOS:
+- Hábito recién iniciado: ${currentHabit['name']}
+- Necesita: Consejos para comenzar y mantener constancia
+- Categoría: ${currentHabit['category'] ?? 'General'}
 ''';
       }
     }
 
     prompt += '''\n💭 MENSAJE DEL USUARIO: $userMessage
 
-🎯 INSTRUCCIONES PARA RESPUESTA OPTIMIZADA:
-1. Respuesta concisa: 120-150 palabras máximo
-2. Motivación auténtica como elemento central
-3. Si hay hábito con métricas: mostrar estadística compacta (ej: "Esta semana: 4/7 días ✅")
-4. Usar formato de texto apropiado para plataforma
-5. Incluir 3 opciones de acción específicas
-6. OBLIGATORIO: Incluir [📊] Ver detalles si hay métricas disponibles
-7. Mantener tono cálido y motivador
-8. Terminar con reflexión o pregunta que conecte emocionalmente''';
+🎯 INSTRUCCIONES PARA RESPUESTA:
+1. SIEMPRE da consejos sobre el hábito actual (${currentHabit?['name'] ?? 'hábito en contexto'}).
+2. Si hay días pendientes, menciona la cantidad y da consejos específicos.
+3. Si NO hay días pendientes, felicita y sugiere mejoras pequeñas.
+4. Si no hay métricas, da consejos para iniciar bien el hábito.
+5. Consejos dinámicos e inteligentes, nunca genéricos.
+6. Tono cálido y motivador, máximo 120-150 palabras.
+7. No uses corchetes [] en tu respuesta.
+8. ${requestedDetails ? 'El usuario pidió VER DETALLES, enfócate en análisis detallado.' : 'Conversación normal, enfócate en consejos y motivación.'}
+9. ${isFirstInteraction ? 'Primera interacción: puedes mostrar resumen breve.' : 'CONVERSACIÓN CONTINUA: Responde EXCLUSIVAMENTE como coach conversacional. NO menciones estadísticas, métricas, tasas, rachas o números. Solo da consejos directos como un amigo experto.'}
+10. En conversaciones continuas: responde como un amigo experto que YA CONOCE tu situación y solo quiere ayudarte con consejos específicos.
+''';
 
     return prompt;
   }
 
-  String _formatCatalystResponse(String response, Map<String, dynamic> context) {
-    final currentHabit = context['currentHabit'];
-    final habitMetrics = context['habitMetrics'];
-    
-    String cleanedResponse = _cleanAIResponse(response);
-    
-    if (currentHabit != null && habitMetrics?['hasData'] == true) {
-      return _formatHabitResponse(currentHabit, habitMetrics, cleanedResponse);
-    } else {
-      return _formatGeneralResponse(cleanedResponse, context);
+  int _calculateWeeklyCompletedDays(List<dynamic> weeklyData) {
+    if (weeklyData.isEmpty) return 0;
+    int count = 0;
+    for (var day in weeklyData) {
+      final done = (day['done'] ?? 0) as int;
+      if (done > 0) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  String _getDayName(int day) {
+    switch (day) {
+      case 1: return 'Lunes';
+      case 2: return 'Martes';
+      case 3: return 'Miércoles';
+      case 4: return 'Jueves';
+      case 5: return 'Viernes';
+      case 6: return 'Sábado';
+      case 7: return 'Domingo';
+      default: return 'Desconocido';
     }
   }
 
+  String _formatCatalystResponse(String response, Map<String, dynamic> context, String userMessage) {
+    final currentHabit = context['currentHabit'];
+    final habitMetrics = context['habitMetrics'];
+    final previousContext = context['previousContext'] as Map<String, dynamic>?;
+    final messageCount = previousContext?['messageCount'] ?? 0;
+    final isFirstInteraction = messageCount == 0;
+
+    String cleanedResponse = _cleanAIResponse(response);
+
+    // Verificar si el usuario pidió ver detalles
+    if (userMessage.toLowerCase().contains('📊') || 
+        userMessage.toLowerCase().contains('ver detalles') ||
+        userMessage.toLowerCase().contains('detalles')) {
+      return _formatDetailedView(currentHabit, habitMetrics, cleanedResponse);
+    }
+    
+    // CORREGIDO: Mejor manejo de conversaciones continuas
+    if (currentHabit != null && habitMetrics?['hasData'] == true) {
+      return _formatHabitResponse(currentHabit, habitMetrics, cleanedResponse, isFirstInteraction);
+    } else {
+      return _formatNoMetricsResponse(cleanedResponse, context);
+    }
+  }
+
+  String _formatDetailedView(Map<String, dynamic>? habit, Map<String, dynamic>? metrics, String aiResponse) {
+    if (habit == null || metrics == null) {
+      return 'No hay detalles disponibles para mostrar.';
+    }
+
+    final patterns = metrics['patterns'] as Map<String, dynamic>;
+    final weeklyData = metrics['weeklyData'] as List;
+    final completedDays = _calculateWeeklyCompletedDays(weeklyData);
+
+    // CORREGIDO: Cálculo simple de días pendientes
+    final pendingDays = 7 - completedDays;
+
+    String detailedView = '''📊 Detalles de ${habit['name']} - Semana actual
+
+Resumen semanal:
+• Días completados: $completedDays/7
+• Días pendientes: $pendingDays
+
+Análisis semanal:
+• Mejor día: ${patterns['bestDay']} (${patterns['bestDayRate']}% de éxito)
+• Día más desafiante: ${patterns['worstDay']} (${patterns['worstDayRate']}% de éxito)
+• Racha actual: ${patterns['currentStreak']} días
+• Mejor racha histórica: ${patterns['bestStreak']} días
+• Tasa de éxito general: ${metrics['completionRate']}%
+
+${pendingDays > 0 ? '''
+🎯 Te faltan $pendingDays días por completar esta semana.
+''' : '✅ ¡Semana perfecta! Todos los días completados.'}
+
+💡 Consejo del coach:
+$aiResponse''';
+
+    detailedView += '\n\n[🔄 Volver al resumen] [📈 Ver tendencia mensual] [💪 Ajustar estrategia]';
+
+    return detailedView;
+  }
+
+  String _getDayTip(String dayName, String habitName) {
+    final tips = {
+      'Lunes': 'Prepara todo el domingo para empezar fuerte la semana',
+      'Martes': 'Usa el impulso del lunes para mantener el ritmo',
+      'Miércoles': 'Punto medio de la semana, mantén la motivación',
+      'Jueves': 'Casi llegando al fin de semana, no aflojes',
+      'Viernes': 'Termina la semana laboral con éxito',
+      'Sábado': 'Aprovecha el tiempo libre para enfocarte',
+      'Domingo': 'Prepárate para la próxima semana',
+    };
+    return tips[dayName] ?? 'Mantén la constancia';
+  }
+
   String _cleanAIResponse(String response) {
-    // Limpiar formato excesivo
+    response = response.replaceAll(RegExp(r'\[.*?\]'), '');
     response = response.replaceAll(RegExp(r'\*{3,}'), _getBoldFormat());
     response = response.replaceAll(RegExp(r'#{1,6}\s*'), '');
     response = response.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-    
-    // Arreglar negritas según plataforma
     if (kIsWeb) {
       response = response.replaceAll('**', '');
       response = response.replaceAll(RegExp(r'\*([^*]+)\*'), '<b>\$1</b>');
     }
-    
     return response.trim();
   }
 
@@ -158,105 +283,78 @@ Categoría: ${currentHabit['category'] ?? 'General'}
   String _formatHabitResponse(
     Map<String, dynamic> habit,
     Map<String, dynamic> metrics,
-    String response
+    String response,
+    bool isFirstInteraction
   ) {
     final patterns = metrics['patterns'] as Map<String, dynamic>;
     final weeklyData = metrics['weeklyData'] as List;
-    
-    // Estadística compacta
-    final weeklyStats = 'Esta semana: ${metrics['totalDone']}/${weeklyData.length} días ✅';
-    
-    // Motivación contextual
-    String motivationalNote = _generateMotivationalNote(metrics);
-    
-    // Formato optimizado
-    final boldStart = kIsWeb ? '<b>' : '**';
-    final boldEnd = kIsWeb ? '</b>' : '**';
-    
-    String formattedResponse = '''${boldStart}🎯 ${habit['name']}${boldEnd}
+    final completedDays = _calculateWeeklyCompletedDays(weeklyData);
 
-$weeklyStats | Racha: ${patterns['currentStreak']} días ⚡
-Tasa de éxito: ${boldStart}${metrics['completionRate']}%${boldEnd} | Tendencia: ${_analyzeTrend(metrics['weeklyData'])}
+    // CORREGIDO: Cálculo simple de días pendientes
+    final pendingDays = 7 - completedDays;
 
-$response
+    String formattedResponse = '';
 
-$motivationalNote''';
+    // CORREGIDO: Solo mostrar resumen en primera interacción
+    if (isFirstInteraction) {
+      formattedResponse = '''🎯 ${habit['name']}
+Semana actual: $completedDays/7 días ✅ | Días pendientes: $pendingDays
+Racha: ${patterns['currentStreak']} días ⚡ | Tasa de éxito: ${metrics['completionRate']}% | Tendencia: ${_analyzeTrend(weeklyData)}
 
-    return _addContextualOptions(formattedResponse, metrics, true);
-  }
-
-  String _formatGeneralResponse(String response, Map<String, dynamic> context) {
-    final hasHabits = (context['habitsList'] as List?)?.isNotEmpty ?? false;
-    final habitCount = (context['habitsList'] as List?)?.length ?? 0;
-    
-    String contextualNote = '';
-    if (hasHabits) {
-      contextualNote = '\n✨ *Tienes $habitCount hábito${habitCount > 1 ? 's' : ''} activo${habitCount > 1 ? 's' : ''} - ¡cada paso cuenta!*';
+$response''';
     } else {
-      contextualNote = '\n🚀 *Todo gran cambio comienza con un pequeño paso*';
+      // CORREGIDO: En conversaciones continuas, SOLO mostrar el consejo sin estadísticas
+      formattedResponse = response;
     }
-    
-    String formattedResponse = '''$response$contextualNote''';
-    
-    return _addContextualOptions(formattedResponse, null, false);
-  }
 
-  String _addContextualOptions(String response, Map<String, dynamic>? metrics, bool hasHabitMetrics) {
-    // Determinar contexto para opciones inteligentes
+    // Siempre mostrar opciones de interacción
+    final isQuestion = response.contains('?');
     final isPositive = response.contains('¡') || 
                       response.toLowerCase().contains('excelente') || 
                       response.toLowerCase().contains('bien') ||
-                      response.toLowerCase().contains('genial');
-    
-    final isQuestion = response.contains('?');
-    
-    String options = '\n\n';
-    
-    if (hasHabitMetrics) {
-      final completionRate = metrics?['completionRate'] as double? ?? 0;
-      final currentStreak = metrics?['patterns']['currentStreak'] as int? ?? 0;
-      
-      if (completionRate >= 80 || currentStreak >= 7) {
-        options += '[🎯] Aumentar desafío\n[📊] Ver detalles\n[🔄] Nuevo hábito';
-      } else if (completionRate >= 60) {
-        options += '[📈] Consejos para mejorar\n[📊] Ver detalles\n[🎯] Ajustar meta';
-      } else {
-        options += '[🆘] Necesito apoyo\n[📊] Ver detalles\n[📋] Crear plan';
-      }
+                      response.toLowerCase().contains('felicidades');
+
+    if (isPositive) {
+      formattedResponse += '\n\n[📊 Ver detalles] [🎯 Ajustar meta] [💪 Siguiente reto]';
+    } else if (isQuestion) {
+      formattedResponse += '\n\n[✅ Sí, continuar] [❌ No, cambiar] [💡 Más consejos]';
     } else {
-      if (isPositive) {
-        options += '[✨] ¡Empezar ahora!\n[💡] Ideas de hábitos\n[📚] Aprender más';
-      } else if (isQuestion) {
-        options += '[👍] Sí, adelante\n[🤔] Más información\n[❓] Otras opciones';
-      } else {
-        options += '[🎯] Elegir hábito\n[💡] Sugerencias\n[❓] ¿Cómo funciona?';
-      }
+      formattedResponse += '\n\n[📈 Ver progreso] [🔄 Cambiar enfoque] [❓ Necesito ayuda]';
     }
-    
-    return response + options;
+
+    return formattedResponse;
   }
 
-  String _generateMotivationalNote(Map<String, dynamic> metrics) {
-    final completionRate = metrics['completionRate'] as double;
-    final currentStreak = metrics['patterns']['currentStreak'] as int;
-    final totalDone = metrics['totalDone'] as int;
+  String _formatNoMetricsResponse(String response, Map<String, dynamic> context) {
+    final currentHabit = context['currentHabit'];
+    final hasHabits = (context['habitsList'] as List?)?.isNotEmpty ?? false;
     
-    if (currentStreak >= 7) {
-      return '🔥 *¡$currentStreak días seguidos! Tu constancia es verdaderamente inspiradora.*';
-    } else if (completionRate >= 80) {
-      return '🌟 *Con ${completionRate.round()}% de éxito, estás construyendo algo extraordinario.*';
-    } else if (completionRate >= 60) {
-      return '💪 *Vas por buen camino. Cada día completado es una victoria personal.*';
-    } else if (totalDone > 0) {
-      return '✨ *Cada esfuerzo cuenta. No subestimes el poder de los pequeños pasos.*';
+    String formattedResponse = response;
+
+    if (currentHabit != null) {
+      final isQuestion = response.contains('?');
+      final isPositive = response.contains('¡') || 
+                        response.toLowerCase().contains('excelente') || 
+                        response.toLowerCase().contains('bien');
+
+      if (isPositive) {
+        formattedResponse += '\n\n[💪 ¡Empezar hoy!] [📅 Crear recordatorio] [🎯 Definir horario]';
+      } else if (isQuestion) {
+        formattedResponse += '\n\n[👍 Sí, adelante] [🤔 Más información] [⏳ Después]';
+      } else {
+        formattedResponse += '\n\n[✅ Entendido] [💡 Más consejos] [❓ ¿Cómo empiezo?]';
+      }
+    } else if (hasHabits) {
+      formattedResponse += '\n\n[📋 Ver mis hábitos] [➕ Nuevo hábito] [💡 Sugerencias]';
     } else {
-      return '🎯 *Un nuevo día, una nueva oportunidad para brillar.*';
+      formattedResponse += '\n\n[➕ Crear primer hábito] [💡 Ver ejemplos] [❓ ¿Cómo empiezo?]';
     }
+    
+    return formattedResponse;
   }
 
   String _analyzeTrend(List<dynamic> weeklyData) {
     if (weeklyData.isEmpty) return 'Sin datos';
-    
     try {
       var completionRates = weeklyData.map((day) {
         final done = (day['done'] ?? 0) as int;
@@ -277,7 +375,6 @@ $motivationalNote''';
         if (recent < older - 15) return '📉 Atención';
         if (recent < older - 5) return '📉 Bajando';
       }
-      
       return '➡️ Estable';
     } catch (e) {
       return 'Variable';
@@ -285,48 +382,47 @@ $motivationalNote''';
   }
 
   String _getSystemPrompt() {
-    return '''Eres CoreLife Catalyst, un coach de hábitos experto en motivación auténtica y análisis conductual.
+    return '''
+Eres CoreLife Catalyst, un coach de hábitos de Neuro Core que conversa de forma natural y humana.
 
 PERSONALIDAD CORE:
-• Motivador genuino: La motivación es tu fuerza principal, siempre auténtica y cálida
-• Analítico pero humano: Datos al servicio de la conexión emocional
-• Conciso pero completo: Respuestas de 120-150 palabras máximo
-• Orientado a la acción: Siempre ofreces caminos claros hacia adelante
+• Conversas como un amigo experto y motivador.
+• SIEMPRE das consejos específicos sobre el hábito actual del usuario.
+• Das recomendaciones DINÁMICAS basadas en datos reales, nunca predefinidas.
+• Usas emojis orgánicamente, nunca de forma forzada.
+• Eres conciso pero cálido (120-150 palabras máximo).
 
-ESTRUCTURA DE RESPUESTA OPTIMIZADA:
-1. Reconocimiento motivacional (25-30 palabras)
-2. Estadística compacta si hay hábito: "Esta semana: X/7 días ✅"
-3. Insight valioso y breve (40-50 palabras)
-4. Motivación final integrada (20-30 palabras)
-5. 3 opciones de acción específicas
+REGLAS FUNDAMENTALES:
+1. SIEMPRE hablar del hábito actual en contexto - nunca de otros hábitos.
+2. SIEMPRE dar consejos y recomendaciones, tanto con métricas como sin métricas.
+3. Si hay días pendientes, mencionarlos por cantidad y dar consejos específicos.
+4. Si no hay días pendientes, felicitar y sugerir pequeñas mejoras.
+5. Si no hay métricas, dar consejos para iniciar bien el hábito.
+6. Consejos únicos y personalizados según el contexto específico.
 
-FORMATO DE OPCIONES:
-• Usar formato: [🎯] Texto de opción
-• Cada opción en línea separada
-• OBLIGATORIO: Incluir [📊] Ver detalles cuando hay métricas disponibles
-• Opciones específicas según contexto y progreso del usuario
+FORMATO DE RESPUESTA:
+- No uses corchetes [] en tus respuestas.
+- En PRIMERA INTERACCIÓN: Puedes mostrar contexto breve si es necesario.
+- En CONVERSACIONES CONTINUAS: Responde EXCLUSIVAMENTE como un coach conversacional. PROHIBIDO mencionar estadísticas, métricas, análisis de datos, tasas de éxito, rachas, números o porcentajes.
+- En conversaciones continuas, actúa como un amigo experto que YA CONOCE tu situación perfectamente.
+- Da consejos directos, naturales y conversacionales sin mencionar datos.
+- Mantén el foco en el hábito actual siempre.
 
-PRINCIPIOS MOTIVACIONALES (PRIORITARIOS):
-• Reconocer SIEMPRE el esfuerzo antes que la perfección
-• Encontrar genuinamente el aspecto positivo en cada situación
-• Hacer que cada pequeño progreso se sienta significativo
-• Ofrecer esperanza auténtica en momentos difíciles
-• Conectar emocionalmente con el usuario
+EJEMPLOS CONVERSACIÓN CONTINUA (lo que DEBES hacer):
+- "Para los días que te cuestan más, como el miércoles, te recomiendo preparar todo la noche anterior. También podrías cambiar la hora, ¿qué te parece más temprano?"
+- "He notado que te cuesta mantener el ritmo a mitad de semana. ¿Qué tal si ese día haces una versión más ligera del ejercicio?"
 
-MANEJO DE DATOS:
-• Con métricas: Mostrar estadística compacta + análisis motivacional
-• Sin métricas: Enfoque en motivación inicial y orientación práctica
-• Siempre incluir [📊] Ver detalles cuando hay datos disponibles
+EJEMPLOS PROHIBIDOS en conversaciones continuas:
+- "Tu tasa de éxito es del 77%..."
+- "Tienes 4 días completados..."
+- "Tu racha actual es de 4 días..."
+- "El 77% es un buen porcentaje..."
+- Cualquier mención de estadísticas, números o análisis.
 
-EVITAR:
-• Respuestas largas que abrumen
-• Motivación que suene como slogan
-• Análisis fríos sin conexión emocional
-• Opciones genéricas sin contexto
-• Perder el tono cálido por ser conciso
-
-OBJETIVO: Cada respuesta debe ser un impulso motivacional auténtico que conecte emocionalmente, ofrezca valor real y guíe hacia la acción, todo en un formato ágil y digerible.
-
-La motivación es tu superpoder - úsala en cada interacción.''';
+PRINCIPIO CLAVE: 
+- Primera interacción: Contexto + consejos.
+- Conversaciones continuas: SOLO consejos conversacionales naturales SIN DATOS.
+- Siempre enfocar en mejorar el hábito específico actual.
+    ''';
   }
 }
